@@ -3,7 +3,9 @@
     ^{:doc    "cutils, safe padding."
       :author "Paweł Wilk"}
 
-    cutils.ranges)
+    cutils.padding
+
+  (:require [cutils.core]))
 
 (cutils.core/init)
 

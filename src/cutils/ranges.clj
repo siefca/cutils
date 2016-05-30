@@ -5,52 +5,13 @@
 
     cutils.ranges
 
-  (:require [clojure.string :as s]))
+  (:require [cutils.core]
+            [clojure.string :as s]))
 
 (cutils.core/init)
 
-(defn drop-take
-  "Calls (drop d coll) and then (take t …) on a result of that call."
-  {:added "1.0.0"
-   :tag clojure.lang.ISeq}
-  [^clojure.lang.ISeq coll
-   ^java.lang.Number     d
-   ^java.lang.Number     t]
-  (take t (drop d coll)))
-
-(defn vec-first
-  "Gets first element of a vector. Returns the element or nil."
-  {:added "1.0.0"}
-  [^clojure.lang.IPersistentVector v]
-  (partial get idx 0))
-
-(defn vec-find-idx
-  "Returns index of first element of a vector v for which pred returns
-  truth (not nil and not false). Returns nil if no matching element was
-  found. If the start argument is given then it starts from that position."
-  {:added "1.0.0"
-   :tag java.lang.Number}
-  ([^clojure.lang.Fn             pred
-    ^clojure.lang.IPersistentVector v
-    ^java.lang.Number           start]
-   (when-let [n (vec-find-idx pred (subvec v start))]
-     (+ start n)))
-  ([^clojure.lang.Fn             pred
-    ^clojure.lang.IPersistentVector v]
-   (loop [r v n 0]
-     (if-let [el (find r 0)]
-       (if (pred (peek el)) n (recur (subvec r 1) (inc n)))
-       nil))))
-
-(defn vec-remove
-  "Removes elements from a vector v for which the function pred (receiving
-  each element as its argument) returns truth (not nil and not false). Returns
-  new vector."
-  {:added "1.0.0"
-   :tag clojure.lang.IPersistentVector}
-  [^clojure.lang.Fn pred
-   ^clojure.lang.IPersistentVector v]
-  (vec (remove pred v)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Range helpers
 
 (defn safe-range
   "Range-safe wrapper for functions that require ranges. It fixes the given
@@ -92,25 +53,77 @@
    :tag clojure.lang.Fn}
   [^clojure.lang.Fn f]
   (fn
-    ([obj
-      ^java.lang.Number start]
+    ([obj, ^java.lang.Number start]
      (safe-range f obj start))
-    ([obj
-      ^java.lang.Number start
-      ^java.lang.Number end]
+    ([obj, ^java.lang.Number start, ^java.lang.Number end]
      (safe-range f obj start end))))
 
-(def safe-subvec
-  "Range-safe version of clojure.core/subvec. It returns an empty object of
-  the same type as v if positions given as start and end are cancelling each
-  other out. It fixes the positions if they are lower or higher than a size of
-  the given vector."
-  (safe-range-fn subvec))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Sequential operations
+
+(defn drop-take
+  "Calls (drop d coll) and then (take t …) on a result of that call."
+  {:added "1.0.0"
+   :tag clojure.lang.ISeq}
+  [^clojure.lang.ISeq coll
+   ^java.lang.Number     d
+   ^java.lang.Number     t]
+  (take t (drop d coll)))
+
+(defn safe-subseq
+  "Returns an empty sequence if positions given as start and end are
+  cancelling each other out. It fixes the positions if they are lower or
+  higher than the size of the given sequence.
+
+  Be aware that if end is not given it will be counted using the count
+  function which might be inefficient for some data structures."
+  {:added "1.0.0"
+   :tag clojure.lang.ISeq}
+  ([^clojure.lang.ISeq s
+    ^Number start]
+   (safe-subseq s start (count s)))
+  ([^clojure.lang.ISeq s
+    ^Number start
+    ^Number end]
+   (take (- end start) (drop start s))))
+
+(defn subseq-preserve
+  "Takes a sequence s, a set of objects p and a range of elements expressed
+  with start and end. Returns an empty sequence if positions given as start
+  and end are cancelling each other out.
+
+  Before returning new sequence it memorizes first element of the given
+  sequence if it matches one of the elements from p. If there is no match the
+  function works the same way as cutils.ranges/safe-subseq. If there is a
+  match the function creates a sequence using ranges but without the first
+  element. Then it returns the result of slicing with the memorized character
+  added to the beginning of it. It doesn't add the element if the result is
+  empty."
+  {:added "1.0.0"
+   :tag clojure.lang.ISeq}
+  ([^clojure.lang.ISeq           s
+    ^clojure.lang.IPersistentSet p
+    ^java.lang.Number        start]
+   (subseq-preserve s p start (dec (count s))))
+  ([^clojure.lang.ISeq           s
+    ^clojure.lang.IPersistentSet p
+    ^java.lang.Number        start
+    ^java.lang.Number          end]
+   (if (empty? s)
+     s
+     (let [f (first s)]
+       (if (contains? p f)
+         (let [r (safe-subseq s (inc start) (inc end))]
+           (if (empty? r) r (cons f r)))
+         (safe-subseq s start end))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; String operations
 
 (def safe-subs
   "Range-safe version of clojure.core/subs. It returns an empty string if
   positions given as start and end are cancelling each other out. It fixes the
-  positions if they are lower or higher than a size of the given string."
+  positions if they are lower or higher than the size of the given string."
   (safe-range-fn subs))
 
 (defn subs-preserve
@@ -144,6 +157,40 @@
            (if (empty? r) r (str f r)))
          (safe-subs s start end))))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Vector operations
+
+(defn vec-first
+  "Gets first element of a vector. Returns the element or nil."
+  {:added "1.0.0"}
+  [^clojure.lang.IPersistentVector v]
+  (get v 0))
+
+(defn vec-find-idx
+  "Returns index of first element of a vector v for which pred returns
+  truth (not nil and not false). Returns nil if no matching element was
+  found. If the start argument is given then it starts from that position."
+  {:added "1.0.0"
+   :tag java.lang.Number}
+  ([^clojure.lang.Fn             pred
+    ^clojure.lang.IPersistentVector v
+    ^java.lang.Number           start]
+   (when-let [n (vec-find-idx pred (subvec v start))]
+     (+ start n)))
+  ([^clojure.lang.Fn             pred
+    ^clojure.lang.IPersistentVector v]
+   (loop [r v n 0]
+     (if-let [el (find r 0)]
+       (if (pred (peek el)) n (recur (subvec r 1) (inc n)))
+       nil))))
+
+(def safe-subvec
+  "Range-safe version of clojure.core/subvec. It returns an empty object of
+  the same type as v if positions given as start and end are cancelling each
+  other out. It fixes the positions if they are lower or higher than a size of
+  the given vector."
+  (safe-range-fn subvec))
+
 (defn subvec-preserve
   "Range-safe version of clojure.core/subvec with first element
   preservation. It returns an empty vector if positions given as start and end
@@ -169,7 +216,7 @@
     ^clojure.lang.IPersistentSet    p
     ^java.lang.Number           start
     ^java.lang.Number             end]
-   (if (or (>= start end) (empty? v))
+   (if (or (>= start end) (not (contains? v 0)))
      (empty v)
      (let [f (get v 0)]
        (if (contains? p f)
