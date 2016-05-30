@@ -93,20 +93,11 @@
    (subvec-preserve v sign-chars start (+ start num))))
 
 (defn- fix-sign-seq
-  "Removes plus character from the head of a sequential collection. If the
-  first element of that collection is plus or minus character and second is
-  not a number then it returns nil."
+  "Removes plus character from the head of a sequential collection."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^clojure.lang.ISeq coll]
-  (let [first-char  (first  coll)
-        second-char (second coll)]
-    (not-empty
-     (cond
-       (number? first-char) coll
-       (= \+    first-char) (if (number? second-char) (next coll) nil)
-       (= \-    first-char) (if (number? second-char) coll nil)
-       :default nil))))
+  (if (= \+ (first coll)) (next coll) coll))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
