@@ -6,7 +6,8 @@
     cutils.strings
 
   (:require [cutils.core]
-            [clojure.string :as s]))
+            [clojure.string :as   s]
+            [clojure.edn    :as edn]))
 
 (cutils.core/init)
 
@@ -71,8 +72,7 @@
   (if (number? s)
     s
     (some->> s pstr
-             (re-find #"[+-]?(\d|\d\.\d)+[MN]?") not-empty
-             clojure.edn/read-string)))
+             (re-find #"[+-]?(\d|\d\.\d)+[MN]?") not-empty edn/read-string)))
 
 (defn str->int
   "Converts a string to an integer. Returns nil if something went wrong."
