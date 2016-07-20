@@ -120,7 +120,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; String operations
 
-(def safe-subs
+(def ^{:added "1.0.0"
+       :tag String}
+  safe-subs
   "Range-safe version of clojure.core/subs. It returns an empty string if
   positions given as start and end are cancelling each other out. It fixes the
   positions if they are lower or higher than the size of the given string."
@@ -184,7 +186,9 @@
        (if (pred (peek el)) n (recur (subvec r 1) (inc n)))
        nil))))
 
-(def safe-subvec
+(def ^{:added "1.0.0"
+       :tag clojure.lang.IPersistentVector}
+  safe-subvec
   "Range-safe version of clojure.core/subvec. It returns an empty object of
   the same type as v if positions given as start and end are cancelling each
   other out. It fixes the positions if they are lower or higher than a size of

@@ -14,7 +14,70 @@
 (cutils.core/init)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Defaults
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag Boolean}
+  *digitization-throws*
+  true)
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag clojure.lang.IPersistentSet}
+  *digital-numbers*
+  #{java.lang.Byte
+    java.lang.Short
+    java.lang.Integer
+    java.lang.Long
+    clojure.lang.BigInt
+    java.math.BigInteger
+    java.math.BigDecimal})
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag clojure.lang.IPersistentMap}
+  *chars-to-digits*
+  (let [snum (range 0 10)
+        nums (mapcat (partial repeat 2)  snum)
+        strs (mapcat (juxt str identity) snum)
+        syms (mapcat (juxt (comp symbol  str) identity) snum)
+        kwds (mapcat (juxt (comp keyword str) identity) snum)
+        chrc (mapcat (juxt (comp first   str) identity) snum)]
+    (apply hash-map (concat nums strs syms kwds chrc))))
+
+(def ^{:added "1.0.0"
+       :const true
+       :tag Integer}
+  char-num-base
+  "ASCII code of 0 character."
+  (int \0))
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag clojure.lang.IPersistentMap}
+  *s-to-chars*
+  "Map of plus and minus signs to characters."
+  {- \-, :- \-, '- \-, "-" \-, \- \-
+   + \+, :+ \+, '+ \+, "+" \+, \+ \+})
+
+(def ^{:added "1.0.0"
+       :tag clojure.lang.IPersistentSet
+       :dynamic true}
+  *sign-chars*
+  "Set of plus and minus signs."
+  (set (keys *s-to-chars*)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
+
+(defn- dig-throw-arg
+  "Throws argument exception when *digitization-throws* is not false nor nil."
+  {:added "1.0.0"
+   :tag nil}
+  [& more]
+  (when *digitization-throws*
+    (apply throw-arg more)))
 
 (defn- add-minus
   "Helper that adds minus sign to a collection coll if a number given as n is
@@ -34,19 +97,6 @@
     ^clojure.lang.ISeq coll]]
   (pad coll (- min-digits num-items) 0 true))
 
-(def digital-numbers
-  ^{:added "1.0.0"
-    :private true
-    :const true
-    :tag clojure.lang.IPersistentSet}
-  #{java.lang.Byte
-    java.lang.Short
-    java.lang.Integer
-    java.lang.Long
-    clojure.lang.BigInt
-    java.math.BigInteger
-    java.math.BigDecimal})
-
 (defn subs-signed
   "Safely creates a substring preserving its first character when it is a plus
   or a minus sign. Preservation means that that sign (if present in front of
@@ -56,11 +106,11 @@
    :tag String}
   ([^String     s
     ^Number start]
-   (subs-preserve s sign-chars start))
+   (subs-preserve s *sign-chars* start))
   ([^String     s
     ^Number start
     ^Number   num]
-   (subs-preserve s sign-chars start (+ start num))))
+   (subs-preserve s *sign-chars* start (+ start num))))
 
 (defn subseq-signed
   "Safely creates a sequence preserving its first character when it is a plus
@@ -69,13 +119,13 @@
   unless that sequence is empty."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
-  ([^clojure.lang.ISeq    s
-    ^Number start]
-   (subseq-preserve s sign-chars start))
-  ([^clojure.lang.ISeq    s
-    ^Number start
-    ^Number   num]
-   (subseq-preserve s sign-chars start (+ start num))))
+  ([^clojure.lang.ISeq s
+    ^Number        start]
+   (subseq-preserve s *sign-chars* start))
+  ([^clojure.lang.ISeq s
+    ^Number        start
+    ^Number          num]
+   (subseq-preserve s *sign-chars* start (+ start num))))
 
 (defn subvec-signed
   "Safely creates subvector preserving its first element when it is a plus or
@@ -86,11 +136,11 @@
    :tag clojure.lang.IPersistentVector}
   ([^clojure.lang.IPersistentVector v
     ^Number start]
-   (subvec-preserve v sign-chars start))
+   (subvec-preserve v *sign-chars* start))
   ([^clojure.lang.IPersistentVector v
     ^Number start
     ^Number   num]
-   (subvec-preserve v sign-chars start (+ start num))))
+   (subvec-preserve v *sign-chars* start (+ start num))))
 
 (defn- fix-sign-seq
   "Removes plus character from the head of a sequential collection."
@@ -101,19 +151,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
-
-(def chars-to-digits
-  ^{:added "1.0.0"
-    :private true
-    :tag clojure.lang.IPersistentMap
-    :const true}
-  (let [snum (range 0 10)
-        nums (mapcat (partial repeat 2)  snum)
-        strs (mapcat (juxt str identity) snum)
-        syms (mapcat (juxt (comp symbol  str) identity) snum)
-        kwds (mapcat (juxt (comp keyword str) identity) snum)
-        chrc (mapcat (juxt (comp first   str) identity) snum)]
-    (apply hash-map (concat nums strs syms kwds chrc))))
 
 (defn num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
@@ -156,16 +193,18 @@
                   (cons (mod current 10) result)
                   (inc processed))))))))
 
-(def big-seq-digits
-  ^{:added "1.0.0"
-    :const true
-    :tag Long}
+(def ^{:added "1.0.0"
+       :const true
+       :private true
+       :tag Long}
+  big-seq-digits
   (num->digits (Long/MAX_VALUE)))
 
-(def big-seq-digits-count
-  ^{:added "1.0.0"
-    :const true
-    :tag Long}
+(def ^{:added "1.0.0"
+       :const true
+       :private true
+       :tag Long}
+  big-seq-digits-count
   (count big-seq-digits))
 
 (defn seq-digits-big?
@@ -173,8 +212,6 @@
    :tag Boolean}
   [^clojure.lang.ISeq d]
   (>= (count d) big-seq-digits-count))
-
-
 
 (defn- big-seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -186,7 +223,9 @@
     (loop [x (reverse d) r 0N i 1N]
       (if (nil? x)
         r
-        (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))))
+        (recur (next x)
+               (+' r (*' (first x) i))
+               (*' 10 i))))))
 
 (defn- long-seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -198,7 +237,9 @@
     (loop [x (reverse d) r (long 0) i (long 1)]
       (if (nil? x)
         r
-        (recur (next x) (+ r (* (long (first x)) i)) (* 10 i))))))
+        (recur (next x)
+               (+ r (* (long (first x)) i))
+               (* 10 i))))))
 
 (defn- seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -238,59 +279,77 @@
    :const true
    :tag java.lang.Boolean}
   [^Number n]
-  (contains? digital-numbers (class n)))
+  (contains? *digital-numbers* (class n)))
+
+(defn- digitize-seq-core
+  {:added "1.0.0"
+   :tag clojure.lang.LazySeq}
+  [^clojure.lang.ISeq src
+   ^Boolean had-number?]
+  (when-not (empty? src)
+    (let [e (first src)
+          e (if (string? e) (pstr e) e)
+          n (next src)]
+      (if (whitechar? e)
+        (recur n had-number?)
+        (if-let [c (*chars-to-digits* e)]
+          (cons c (lazy-seq (digitize-seq-core n true)))
+          (if-let [c (*s-to-chars* e)]
+            (if-not had-number?
+              (cons c (lazy-seq (digitize-seq-core n true)))
+              (dig-throw-arg "The sign of a number should occur once and precede any digit"))
+            (dig-throw-arg "Sequence element is not a digit nor a sign: " e)))))))
 
 (defn- digitize-seq
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
-  ([^clojure.lang.ISeq src]
-   (fix-sign-seq (digitize-seq src false)))
   ([^clojure.lang.ISeq src
-    ^Boolean had-number?]
-   (when-not (empty? src)
-     (let [e (first src)
-           e (if (string? e) (pstr e) e)
-           n (next src)]
-       (if (whitechar? e)
-         (recur n had-number?)
-         (if-let [c (chars-to-digits e)]
-           (cons c (lazy-seq (digitize-seq n true)))
-           (if-let [c (s-to-chars e)]
-             (if-not had-number?
-               (cons c (lazy-seq (digitize-seq n true)))
-               (throw-arg "The sign of a number should occur once and precede any digit"))
-             (throw-arg "Sequence element is not a digit nor a sign: " e))))))))
+    ^Number       num-drop
+    ^Number       num-take]
+   (-> src
+       (digitize-seq-core false)
+       (fix-sign-seq)
+       (subseq-signed num-drop num-take)))
+  ([^clojure.lang.ISeq src
+    ^Number       num-take]
+   (digitize-seq src 0 num-take))
+  ([^clojure.lang.ISeq src]
+   (fix-sign-seq (digitize-seq-core src false))))
+
+(defn- digitize-vec-core
+  {:added "1.0.0"
+   :tag clojure.lang.LazySeq}
+  [^clojure.lang.IPersistentVector src
+   ^Boolean had-number?]
+  (when (contains? src 0)
+    (let [e (get src 0)
+          e (if (string? e) (pstr e) e)
+          n (subvec src 1)]
+      (if (whitechar? e)
+        (recur n had-number?)
+        (if-let [c (*chars-to-digits* e)]
+          (cons c (lazy-seq (digitize-vec-core n true)))
+          (if-let [c (*s-to-chars* e)]
+            (if-not had-number?
+              (cons c (lazy-seq (digitize-vec-core n true)))
+              (dig-throw-arg "The sign of a number should occur once and precede any digit"))
+            (dig-throw-arg "Sequence element is not a digit nor a sign: " e)))))))
 
 (defn- digitize-vec
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
-  ([^clojure.lang.ISeq src]
-   (fix-sign-seq (digitize-seq src false)))
-  ([^clojure.lang.ISeq src
-    ^Boolean had-number?]
-   (when (contains? src 0)
-     (let [e (get src 0)
-           e (if (string? e) (pstr e) e)
-           n (subvec src 1)]
-       (if (whitechar? e)
-         (recur n had-number?)
-         (if-let [c (chars-to-digits e)]
-           (cons c (lazy-seq (digitize-seq n true)))
-           (if-let [c (s-to-chars e)]
-             (if-not had-number?
-               (cons c (lazy-seq (digitize-seq n true)))
-               (throw-arg "The sign of a number should occur once and precede any digit"))
-             (throw-arg "Sequence element is not a digit nor a sign: " e))))))))
-
-(defn- digitize-str
-  {:added "1.0.0"
-   :tag String}
-  [^String s]
-  (when-some [s (remove-white-chars s)]
-    (if (re-find #"^[+-]?\d+$" s)
-      (not-empty (if (= \+ (get s 0)) (subs s 1) s))
-      nil ;add some error handling
-      )))
+  ([^clojure.lang.IPersistentVector src
+    ^Number                    num-drop
+    ^Number                    num-take]
+   (-> src
+       (digitize-vec-core false)
+       (fix-sign-seq)
+       (subseq-signed num-drop num-take)))
+  ([^clojure.lang.IPersistentVector src
+    ^Number                    num-take]
+   (digitize-vec src 0 num-take))
+  ([^clojure.lang.IPersistentVector src]
+   (fix-sign-seq (digitize-vec-core src false))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
@@ -299,20 +358,13 @@
   [^Number n]
   (when (digital-number? n) n))
 
-(def char-num-base
-  "ASCII code of 0 character."
-  ^{:added "1.0.0"
-    :const true
-    :tag java.lang.Integer}
-  (int \0))
-
 (defn- digitize-char
   "Changes numeric character into normalized representation. Returns character
   or nil."
   {:added "1.0.0"
    :tag Character}
   [^Character c]
-  (when-some [c (chars-to-digits c)]
+  (when-some [c (*chars-to-digits* c)]
     (char (+ char-num-base c))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -394,84 +446,84 @@
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-vec v))))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-vec v))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (subseq-signed (digitize-vec v) 0 nt))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (subseq-signed (digitize-vec v) nd nt)))
+    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (digitize-vec v nt))
+    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (digitize-vec v nd nt)))
   (digits->num
-      ([^clojure.lang.IPersistentVector v]                         (seq-digits->num (digits->seq v)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->num (digits->seq v nt)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->num (digits->seq v nd nt))))
+      ([^clojure.lang.IPersistentVector v]                         (seq-digits->num (digitize-vec v)))
+    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->num (digitize-vec v nt)))
+    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->num (digitize-vec v nd nt))))
   (digits->str
-      ([^clojure.lang.IPersistentVector v]                         (seq-digits->str (digits->seq v)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->str (digits->seq nt)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->str (digits->seq v nd nt))))
+      ([^clojure.lang.IPersistentVector v]                         (seq-digits->str (digitize-vec v)))
+    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->str (digitize-vec v nt)))
+    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->str (digitize-vec v nd nt))))
 
   clojure.lang.ISeq
 
   (digitize
-      [^clojure.lang.ISeq s]                                       (digitize-seq s))
+      [^clojure.lang.ISeq s]                                       (not-empty (digitize-seq s)))
   (digits->seq
       ([^clojure.lang.ISeq s]                                      (digitize-seq s))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (subseq-signed (digitize-seq s) 0 nt))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (subseq-signed (digitize-seq s) nd nt)))
+    ([^clojure.lang.ISeq   s, ^Number nt]                          (digitize-seq s nt))
+    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (digitize-seq s nd nt)))
   (digits->num
-      ([^clojure.lang.ISeq s]                                      (seq-digits->num (digits->seq s)))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->num (digits->seq s nt)))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->num (digits->seq s nd nt))))
+      ([^clojure.lang.ISeq s]                                      (seq-digits->num (digitize-seq s)))
+    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->num (digitize-seq s nt)))
+    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->num (digitize-seq s nd nt))))
   (digits->str
-      ([^clojure.lang.ISeq s]                                      (seq-digits->str (digits->seq s)))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digits->seq s nt)))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digits->seq s nd nt))))
+      ([^clojure.lang.ISeq s]                                      (seq-digits->str (digitize-seq s)))
+    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digitize-seq s nt)))
+    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digitize-seq s nd nt))))
 
   java.lang.String
 
   (digitize
-      [^String  s]                            (digitize-str s))
+      [^String  s]                                                 (not-empty (seq-digits->str (digitize-seq s))))
   (digits->seq
-      ([^String s]                            (seq (digitize-str s)))
-    ([^String   s, ^Number nt]                (subseq-signed (digitize-str s) 0 nt))
-    ([^String   s, ^Number nd, ^Number nt]    (subseq-signed (digitize-str s) nd nt)))
+      ([^String s]                                                 (digitize-seq s))
+    ([^String   s, ^Number nt]                                     (digitize-seq s nt))
+    ([^String   s, ^Number nd, ^Number nt]                         (digitize-seq s nd nt)))
   (digits->str
-      ([^String s]                            (digitize-str s))
-    ([^String   s, ^Number nt]                (subs-signed (digitize-str s) 0 nt))
-    ([^String   s, ^Number nd, ^Number nt]    (subs-signed (digitize-str s) nd nt)))
+      ([^String s]                                                 (seq-digits->str (digitize-seq s)))
+    ([^String   s, ^Number nt]                                     (seq-digits->str (digitize-seq s nt)))
+    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->str (digitize-seq s nd nt))))
   (digits->num
-      ([^String s]                            (edn/read-string (digits->str s)))
-    ([^String   s, ^Number nt]                (edn/read-string (digits->str s nt)))
-    ([^String   s, ^Number nd, ^Number nt]    (edn/read-string (digits->str s nd nt))))
+      ([^String s]                                                 (seq-digits->num (digitize-seq s)))
+    ([^String   s, ^Number nt]                                     (seq-digits->num (digitize-seq s nt)))
+    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->num (digitize-seq s nd nt))))
 
   java.lang.Character
 
   (digitize
-      [^Character  c]                         (digitize-char c))
+      [^Character  c]                                              (digitize-char c))
   (digits->seq
-      ([^Character c]                         (seq (str (digitize-char c))))
-    ([^Character   c, ^Number nt]             (subseq-signed (str (digitize-char c)) 0 nt))
-    ([^Character   c, ^Number nd, ^Number nt] (subseq-signed (str (digitize-char c)) nd nt)))
+      ([^Character c]                                              (seq (str (digitize-char c))))
+    ([^Character   c, ^Number nt]                                  (subseq-signed (str (digitize-char c)) 0 nt))
+    ([^Character   c, ^Number nd, ^Number nt]                      (subseq-signed (str (digitize-char c)) nd nt)))
   (digits->str
-      ([^Character c]                         (str (digitize-char c)))
-    ([^Character   c, ^Number nt]             (subs-signed (str (digitize-char c)) 0 nt))
-    ([^Character   c, ^Number nd, ^Number nt] (subs-signed (str (digitize-char c)) nd nt)))
+      ([^Character c]                                              (str (digitize-char c)))
+    ([^Character   c, ^Number nt]                                  (subs-signed (str (digitize-char c)) 0 nt))
+    ([^Character   c, ^Number nd, ^Number nt]                      (subs-signed (str (digitize-char c)) nd nt)))
   (digits->num
-      ([^Character c]                         (Integer/parseInt (digitize-char c)))
-    ([^Character   c, ^Number nt]             (Integer/parseInt (digits->str c nt)))
-    ([^Character   c, ^Number nd, ^Number nt] (Integer/parseInt (digits->str c nd nt))))
+      ([^Character c]                                              (Integer/parseInt (digitize-char c)))
+    ([^Character   c, ^Number nt]                                  (Integer/parseInt (digits->str c nt)))
+    ([^Character   c, ^Number nd, ^Number nt]                      (Integer/parseInt (digits->str c nd nt))))
 
   java.lang.Number
 
   (digitize
-      [^Number  n]                            (digitize-num n))
+      [^Number  n]                                                 (digitize-num n))
   (digits->seq
-      ([^Number n]                            (num->digits (digitize-num n)))
-    ([^Number   n, ^Number nt]                (subseq-signed (num->digits (digitize-num n)) 0 nt))
-    ([^Number   n, ^Number nd, ^Number nt]    (subseq-signed (num->digits (digitize-num n)) nd nt)))
+      ([^Number n]                                                 (num->digits (digitize-num n)))
+    ([^Number   n, ^Number nt]                                     (subseq-signed (num->digits (digitize-num n)) 0 nt))
+    ([^Number   n, ^Number nd, ^Number nt]                         (subseq-signed (num->digits (digitize-num n)) nd nt)))
   (digits->num
-      ([^Number n]                            (digitize-num n))
-    ([^Number   n, ^Number nt]                (digits->num (digits->seq n nt)))
-    ([^Number   n, ^Number nd, ^Number nt]    (digits->num (digits->seq n nd nt))))
+      ([^Number n]                                                 (digitize-num n))
+    ([^Number   n, ^Number nt]                                     (digits->num (digits->seq n nt)))
+    ([^Number   n, ^Number nd, ^Number nt]                         (digits->num (digits->seq n nd nt))))
   (digits->str
-      ([^Number n]                            (digitize-str (str n)))
-    ([^Number n, ^Number nt]                  (subs-signed (digitize-str (str n)) nt))
-    ([^Number n, ^Number nd, ^Number nt]      (subs-signed (digitize-str (str n)) nd nt)))
+      ([^Number n]                                                 (digitize (str n)))
+    ([^Number n, ^Number nt]                                       (subs-signed (digitize (str n)) nt))
+    ([^Number n, ^Number nd, ^Number nt]                           (subs-signed (digitize (str n)) nd nt)))
 
   nil
 

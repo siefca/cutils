@@ -14,12 +14,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Character sets definitions
 
-(def whitechars
+(def ^{:added "1.0.0"
+       :private true
+       :tag clojure.lang.IPersistentSet
+       :const true}
+  whitechars
   "Common blank characters."
-  ^{:added "1.0.0"
-    :private true
-    :tag clojure.lang.IPersistentSet
-    :const true}
   #{nil \space \newline \tab \formfeed \return (char 0x0B)})
 
 (defn whitechar?
@@ -27,23 +27,6 @@
    :tag Boolean}
   [c]
   (contains? whitechars c))
-
-(def s-to-chars
-  "Map of plus and minus signs to characters."
-  ^{:added "1.0.0"
-    :private true
-    :tag clojure.lang.IPersistentMap
-    :const true}
-  {- \-, :- \-, '- \-, "-" \-, \- \-
-   + \+, :+ \+, '+ \+, "+" \+, \+ \+})
-
-(def sign-chars
-  "Set of plus and minus signs."
-  ^{:added "1.0.0"
-    :private true
-    :tag clojure.lang.IPersistentSet
-    :const true}
-  (set (keys s-to-chars)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cleaning strings
