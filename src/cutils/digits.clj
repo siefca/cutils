@@ -93,8 +93,8 @@
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^Number min-digits
-   [^Number num-items
-    ^clojure.lang.ISeq coll]]
+   ^Number num-items
+   ^clojure.lang.ISeq coll]
   (pad coll (- min-digits num-items) 0 true))
 
 (defn subs-signed
@@ -115,7 +115,7 @@
 (defn subseq-signed
   "Safely creates a sequence preserving its first character when it is a plus
   or a minus sign. Preservation means that that sign (if present in front of
-  the given string) is memorized and prepended to the resulting sequence
+  the given collection) is memorized and prepended to the resulting sequence
   unless that sequence is empty."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
@@ -152,46 +152,42 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
+(defn- num->digits-core
+  "Changes a number given as n into a sequence of numbers representing decimal
+  digits (in reverse order for positive values). Returns a sequence of two
+  elements: first is a number of digits and second is a lazy sequence."
+  {:added "1.0.0"
+   :tag clojure.lang.LazySeq}
+  [^Number n]
+  (when-not (zero? n)
+    (cons (byte (mod n 10))
+          (lazy-seq (num->digits-core (quot n 10))))))
+
 (defn num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
-  digits. If min-digits argument is given then it pads the returned sequence
-  with leading zeros to satisfy the number of elements."
+  digits. If min-digits argument is given and it is larger than the number of
+  digits then it pads the returned sequence with leading zeros to satisfy the
+  number of elements with a first element preserved (and not counted) if it's
+  not a digit.
+
+  Be aware that in the second case the values of sequence
+  elements will be evaluated in order to know their count."
   {:added "1.0.0"
-   :tag clojure.lang.ISeq}
+   :tag clojure.lang.LazySeq}
   ([^Number n]
-   (loop [current n
-          result ()]
-     (if (zero? current)
-       (add-minus n result)
-       (recur (quot current 10)
-              (cons (mod current 10) result)))))
-  ([^Number min-digits
-    ^Number n]
-   (add-minus
-    n (pad-digits-with-zeros
-       min-digits
-       (loop [current n
-              result ()
-              processed 0]
-         (if (zero? current)
-           (cons processed result)
-           (recur (quot current 10)
-                  (cons (mod current 10) result)
-                  (inc processed)))))))
-  ([^Number min-digits
-    ^Number max-digits
-    ^Number n]
-   (add-minus
-    n (pad-digits-with-zeros
-       min-digits
-       (loop [current n
-              result ()
-              processed 0]
-         (if (or (zero? current) (>= processed max-digits))
-           (cons processed result)
-           (recur (quot current 10)
-                  (cons (mod current 10) result)
-                  (inc processed))))))))
+   (lazy-seq
+    (if (neg? n)
+      (cons \- (lazy-seq (num->digits-core n)))
+      (if (zero? n)
+        (list 0)
+        (num->digits-core (*' -1 n))))))
+  ([^Number n
+    ^Number min-digits]
+   (let [d (num->digits n)
+         f (first d)]
+     (if (digital-number? f)
+       (pad d min-digits 0 true)
+       (lazy-seq (cons f (pad (next d) (dec min-digits) 0 true)))))))
 
 (def ^{:added "1.0.0"
        :const true
@@ -514,8 +510,8 @@
       [^Number  n]                                                 (digitize-num n))
   (digits->seq
       ([^Number n]                                                 (num->digits (digitize-num n)))
-    ([^Number   n, ^Number nt]                                     (subseq-signed (num->digits (digitize-num n)) 0 nt))
-    ([^Number   n, ^Number nd, ^Number nt]                         (subseq-signed (num->digits (digitize-num n)) nd nt)))
+    ([^Number   n, ^Number nt]                                     (subseq-signed (digits->seq n) 0 nt))
+    ([^Number   n, ^Number nd, ^Number nt]                         (subseq-signed (digits->seq n) nd nt)))
   (digits->num
       ([^Number n]                                                 (digitize-num n))
     ([^Number   n, ^Number nt]                                     (digits->num (digits->seq n nt)))
