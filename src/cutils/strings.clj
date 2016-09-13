@@ -31,9 +31,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Cleaning strings
 
-(defn pstr
-  "Cleans up string given as its first argument by removing preceding and following white characters.
-  Returns the string or nil."
+(defn str-trim
+  "Cleans up string given as its first argument by removing preceding and following white characters,
+  including tabs, new lines and carriage returns. Returns the string or nil (if a resulting string
+  is empty)."
   [^String s]
   (some-> s str (s/replace #"(^\s+)|(\s+$)" "") not-empty))
 
@@ -54,7 +55,7 @@
   [^String s]
   (if (number? s)
     s
-    (some->> s pstr
+    (some->> s str-trim
              (re-find #"[+-]?(\d|\d\.\d)+[MN]?")
              not-empty
              edn/read-string)))
