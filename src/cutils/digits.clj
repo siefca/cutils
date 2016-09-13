@@ -264,7 +264,7 @@
     (if (neg? n)
       (cons \- (lazy-seq (num->digits-core n)))
       (if (zero? n)
-        (list 0)
+        (lazy-seq (cons 0 nil))
         (num->digits-core (*' -1 n))))))
   ([^Number n
     ^Number min-digits]
