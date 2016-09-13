@@ -13,6 +13,9 @@
 (cutils.core/init)
 
 ;; TODO: - decimal point handling with *decimal-point-chars* and *decimal-point-mode*
+;;       - when in the mode above and doing to-number conversion either:
+;;          - split on a dot and do it separately for each part (requires two passes),
+;;          - use a function that will be dot-aware (when hitting a dot, divides accumulator by pos to create a rest),
 ;;       - *distribute-digits* (defaults to true)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -351,20 +354,25 @@
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   [^clojure.lang.ISeq src
-   ^Boolean had-number?]
+   ^Boolean had-number?
+   ^Boolean had-point?]
   (when-not (empty? src)
     (let [e (first src)
           e (if (string? e) (str-trim e) e)
           n (next src)]
       (if (dfl-whitechar? e)
-        (recur n had-number?)
+        (recur n had-number? had-point?)
         (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-seq-num-core n true)))
+          (cons c (lazy-seq (digitize-seq-num-core n true had-point?)))
           (if-let [c (*sign-to-char* e)]
             (if-not had-number?
-              (cons c (lazy-seq (digitize-seq-num-core n true)))
+              (cons c (lazy-seq (digitize-seq-num-core n true had-point?)))
               (dig-throw-arg "The sign of a number should occur once and precede any digit"))
-            (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))
+            (if (and *decimal-point-mode* (contains? *decimal-point-chars* e))
+              (if had-point?
+                (dig-throw-arg "The decimal point character should occur just once")
+                (cons \. (lazy-seq (digitize-seq-num-core n had-number? true))))
+              (dig-throw-arg "Sequence element is not a single digit nor a sign: " e))))))))
 
 (defn- digitize-seq-core
   {:added "1.0.0"
@@ -397,7 +405,7 @@
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
    (if *numeric-mode*
-     (fix-sign-seq (digitize-seq-num-core src false))
+     (fix-sign-seq (digitize-seq-num-core src false false))
      (digitize-seq-core src dfl-separator))))
 
 (defn- digitize-vec-core
