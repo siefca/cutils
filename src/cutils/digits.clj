@@ -286,10 +286,13 @@
   (count big-seq-digits))
 
 (defn seq-digits-big?
+  "Checks if a sequence of digits is long enough that it has to be converted
+  to a numeric value of type bigger than long. It is just safe estimate based
+  on a number of elements; in some cases it gives false positives but it does
+  not need to analyze the whole sequence, just counts its size. Returns true
+  or false."
   {:added "1.0.0"
    :tag Boolean}
-  "Checks if a sequence of digits is long enough that it has to be converted
-  to a numeric value of type bigger than long. Returns true or false."
   [^clojure.lang.ISeq d]
   (>= (count d)
       (if *decimal-point-mode*
