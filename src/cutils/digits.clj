@@ -12,12 +12,6 @@
 
 (cutils.core/init)
 
-;; TODO: - decimal point handling with *decimal-point-chars* and *decimal-point-mode*
-;;       - when in the mode above and doing to-number conversion either:
-;;          - split on a dot and do it separately for each part (requires two passes),
-;;          - use a function that will be dot-aware (when hitting a dot, divides accumulator by pos to create a rest),
-;;       - *distribute-digits* (defaults to true)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
 
@@ -294,8 +288,26 @@
 (defn seq-digits-big?
   {:added "1.0.0"
    :tag Boolean}
+  "Checks if a sequence of digits is long enough that it has to be converted
+  to a numeric value of type bigger than long. Returns true or false."
   [^clojure.lang.ISeq d]
-  (>= (count d) big-seq-digits-count))
+  (>= (count d)
+      (if *decimal-point-mode*
+        (dec big-seq-digits-count)
+        big-seq-digits-count)))
+
+(defn- big-seq-digits-dec->num
+  "Warning: nil or false element ends iteration but that shouldn't be a
+  problem in case of validated sequence with digits and optional sign."
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq d]
+  (when-not (empty? d)
+    (loop [x (reverse d) r 0M i 1N]
+      (if (nil? x) r (let [v (first x)]
+                       (if (= \. v)
+                         (recur (next x) (/  r i) 1N)
+                         (recur (next x) (+' r (*' (bigdec v) i))  (*' 10 i))))))))
 
 (defn- big-seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -305,11 +317,20 @@
   [^clojure.lang.ISeq d]
   (when-not (empty? d)
     (loop [x (reverse d) r 0N i 1N]
-      (if (nil? x)
-        r
-        (recur (next x)
-               (+' r (*' (first x) i))
-               (*' 10 i))))))
+      (if (nil? x) r (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))))
+
+(defn- long-seq-digits-dec->num
+  "Warning: nil or false element ends iteration but that shouldn't be a
+  problem in case of validated sequence with digits and optional sign."
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq d]
+  (when-not (empty? d)
+    (loop [x (reverse d) r (double 0) i (long 1)]
+      (if (nil? x) r (let [v (first x)]
+                       (if (= \. v)
+                         (recur (next x) (/ r i) (long 1))
+                         (recur (next x) (+ r (* (double v) i))  (* 10 i))))))))
 
 (defn- long-seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -319,11 +340,7 @@
   [^clojure.lang.ISeq d]
   (when-not (empty? d)
     (loop [x (reverse d) r (long 0) i (long 1)]
-      (if (nil? x)
-        r
-        (recur (next x)
-               (+ r (* (long (first x)) i))
-               (* 10 i))))))
+      (if (nil? x) r (recur (next x) (+ r (* (long (first x)) i)) (* 10 i))))))
 
 (defn- seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -334,9 +351,10 @@
   (let [is-minus? (contains? *minus-chars* (first coll))
         coll      (if is-minus? (next coll) coll)
         is-big?   (seq-digits-big? coll)
-        r         (if is-big?
-                    (big-seq-digits->num coll)
-                    (long-seq-digits->num coll))]
+        r         ((if is-big?
+                     (if *decimal-point-mode* big-seq-digits-dec->num big-seq-digits->num)
+                     (if *decimal-point-mode* long-seq-digits-dec->num long-seq-digits->num))
+                   coll)]
     (if is-minus?
       (if is-big? (*' -1 r) (* -1 r))
       r)))
