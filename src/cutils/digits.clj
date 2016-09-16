@@ -371,44 +371,54 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Normalization and validation
 
-(defn- digitize-seq-num-core
+(defn- digitize-num-core
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   [^clojure.lang.ISeq src
    ^Boolean had-number?
-   ^Boolean had-point?]
-  (when-not (empty? src)
-    (let [e (first src)
+   ^Boolean had-point?
+   ^clojure.lang.Fn f-notempty
+   ^clojure.lang.Fn f-first
+   ^clojure.lang.Fn f-next]
+  (when (f-notempty src)
+    (let [e (f-first src)
           e (if (string? e) (str-trim e) e)
-          n (next src)]
+          n (f-next src)]
       (if (dfl-whitechar? e)
-        (recur n had-number? had-point?)
+        (recur n had-number? had-point? f-notempty f-first f-next)
         (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-seq-num-core n true had-point?)))
+          (cons c (lazy-seq (digitize-seq-num-core n true had-point? f-notempty f-first f-next)))
           (if-let [c (*sign-to-char* e)]
             (if-not had-number?
-              (cons c (lazy-seq (digitize-seq-num-core n true had-point?)))
+              (cons c (lazy-seq (digitize-seq-num-core n true had-point? f-notempty f-first f-next)))
               (dig-throw-arg "The sign of a number should occur once and precede any digit"))
-            (if (and *decimal-point-mode* (contains? *decimal-point-chars* e))
-              (if had-point?
-                (dig-throw-arg "The decimal point character should occur just once")
-                (cons \. (lazy-seq (digitize-seq-num-core n had-number? true))))
-              (dig-throw-arg "Sequence element is not a single digit nor a sign: " e))))))))
+            (if *decimal-point-mode*
+              (if (contains? *decimal-point-chars* e)
+                (if had-point?
+                  (dig-throw-arg "The decimal point character should occur just once")
+                  (cons \. (lazy-seq (digitize-seq-num-core n had-number? true f-notempty f-first f-next))))
+                (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
+              (if (contains? *decimal-point-chars* e)
+                (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
+                (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))
 
-(defn- digitize-seq-core
+(defn- digitize-core
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   [^clojure.lang.ISeq     src
-   ^clojure.lang.Fn  sep-pred]
-  (when-not (empty? src)
-    (let [e (first src)
-          n (next src)]
+   ^clojure.lang.Fn  sep-pred
+   ^clojure.lang.Fn   f-notempty
+   ^clojure.lang.Fn   f-first
+   ^clojure.lang.Fn   f-next]
+  (when (f-notempty src)
+    (let [e (f-first src)
+          n (f-next src)]
       (if (dfl-whitechar? e)
-        (recur n sep-pred)
+        (recur n sep-pred f-notempty f-first f-next)
         (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-seq-core n)))
+          (cons c (lazy-seq (digitize-core n f-notempty f-first f-next)))
           (if (sep-pred e)
-            (cons e (lazy-seq (digitize-seq-core n)))
+            (cons e (lazy-seq (digitize-seq-core n f-notempty f-first f-next)))
             (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))
 
 (defn- digitize-seq
@@ -426,43 +436,8 @@
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
    (if *numeric-mode*
-     (fix-sign-seq (digitize-seq-num-core src false false))
-     (digitize-seq-core src dfl-separator))))
-
-(defn- digitize-vec-core
-  {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  [^clojure.lang.IPersistentVector src
-   ^clojure.lang.Fn           sep-pred]
-  (when (contains? src 0)
-    (let [e (get src 0)
-          n (subvec src 1)]
-      (if (dfl-whitechar? e)
-        (recur n sep-pred)
-        (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-vec-core n)))
-          (if (sep-pred e)
-            (cons e (lazy-seq (digitize-vec-core n)))
-            (dig-throw-arg "Vector element is not a digit nor a separator: " e)))))))
-
-(defn- digitize-vec-num-core
-  {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  [^clojure.lang.IPersistentVector src
-   ^Boolean had-number?]
-  (when (contains? src 0)
-    (let [e (get src 0)
-          e (if (string? e) (str-trim e) e)
-          n (subvec src 1)]
-      (if (dfl-whitechar? e)
-        (recur n had-number?)
-        (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-vec-num-core n true)))
-          (if-let [c (*sign-to-char* e)]
-            (if-not had-number?
-              (cons c (lazy-seq (digitize-vec-num-core n true)))
-              (dig-throw-arg "The sign of a number should occur once and precede any digit"))
-            (dig-throw-arg "Vector element is not a digit nor a sign: " e)))))))
+     (fix-sign-seq (digitize-num-core src false false (comp not empty?) first next))
+     (digitize-core src dfl-separator (comp not empty?) first next))))
 
 (defn- digitize-vec
   {:added "1.0.0"
@@ -479,8 +454,8 @@
    (digitize-vec src 0 num-take))
   ([^clojure.lang.IPersistentVector src]
    (if *numeric-mode*
-     (fix-sign-seq (digitize-vec-num-core src false))
-     (digitize-vec-core src dfl-separator))))
+     (fix-sign-seq (digitize-num-core src false #(contains? % 0) #(get % 0) #(subvec % 1)))
+     (digitize-core src dfl-separator #(contains? % 0) #(get % 0) #(subvec % 1)))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
