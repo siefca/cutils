@@ -12,6 +12,12 @@
 
 (cutils.core/init)
 
+;; TODO:
+;;
+;; - fix single number conv to seq (*spread-numbers*)
+;; - fix conv. to seq
+;; - countable lazy sequence
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
 
@@ -38,7 +44,7 @@
   *decimal-point-mode*
   "If set to true then allows decimal dot to appear in a sequence when
   processing in numeric mode."
-  true)
+  false)
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -62,7 +68,7 @@
        :dynamic true
        :tag clojure.lang.IPersistentMap}
   *chars-to-digits*
-  (let [snum (range 0 10)
+  (let [snum (map byte (range 0 10))
         nums (mapcat (partial repeat 2)  snum)
         strs (mapcat (juxt str identity) snum)
         syms (mapcat (juxt (comp symbol  str) identity) snum)
@@ -234,7 +240,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
-(defn- num->digits-core
+(defn num->digits-core
   "Changes a number given as n into a sequence of numbers representing decimal
   digits (in reverse order for positive values). Returns a sequence of two
   elements: first is a number of digits and second is a lazy sequence."
@@ -242,8 +248,10 @@
    :tag clojure.lang.LazySeq}
   [^Number n]
   (when-not (zero? n)
-    (cons (byte (mod n 10))
-          (lazy-seq (num->digits-core (quot n 10))))))
+    (lazy-seq
+     (cons (num->digits-core (quot n 10)) (mod n 10)))))
+
+;; FIXME!!!
 
 (defn- num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
@@ -259,83 +267,71 @@
   ([^Number n]
    (lazy-seq
     (if (neg? n)
-      (cons \- (lazy-seq (num->digits-core n)))
+      (cons \- (num->digits-core n))
       (if (zero? n)
-        (lazy-seq (cons 0 nil))
+        (cons 0 nil)
         (num->digits-core (*' -1 n))))))
   ([^Number n
     ^Number min-digits]
    (let [d (num->digits n)
          f (first d)]
-     (if (digital-number? f)
-       (pad d min-digits 0 true)
-       (lazy-seq (cons f (pad (next d) (dec min-digits) 0 true)))))))
+     (lazy-seq
+      (if (digital-number? f)
+        (pad d min-digits 0 true)
+        (cons f (pad (next d) (dec min-digits) 0 true)))))))
 
 (def ^{:added "1.0.0"
        :const true
        :private true
        :tag Long}
   big-seq-digits
-  (num->digits (Long/MAX_VALUE)))
+  (count (num->digits (Long/MAX_VALUE))))
 
 (def ^{:added "1.0.0"
        :const true
        :private true
        :tag Long}
-  big-seq-digits-count
-  (count big-seq-digits))
+  long-before
+  (long (/ (Long/MAX_VALUE) 10)))
 
-(defn seq-digits-big?
-  "Checks if a sequence of digits is long enough that it has to be converted
-  to a numeric value of type bigger than long. It is just safe estimate based
-  on a number of elements; in some cases it gives false positives but it does
-  not need to analyze the whole sequence, just counts its size. Returns true
-  or false."
-  {:added "1.0.0"
-   :tag Boolean}
-  [^clojure.lang.ISeq d]
-  (>= (count d)
-      (if *decimal-point-mode*
-        (dec big-seq-digits-count)
-        big-seq-digits-count)))
-
-(defn- big-seq-digits-dec->num
-  "Warning: nil or false element ends iteration but that shouldn't be a
-  problem in case of validated sequence with digits and optional sign."
+(defn- seq-big->num
   {:added "1.0.0"
    :tag Number}
-  [^clojure.lang.ISeq d]
-  (when-not (empty? d)
-    (loop [x (reverse d) r 0M i 1N]
-      (if (nil? x) r (let [v (first x)]
-                       (if (= \. v)
-                         (recur (next x) (/  r i) 1N)
-                         (recur (next x) (+' r (*' (bigdec v) i))  (*' 10 i))))))))
+  [^clojure.lang.ISeq x
+   ^BigDecimal r
+   ^clojure.lang.BigInt i]
+  (if (nil? x) r (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))
 
-(defn- big-seq-digits->num
-  "Warning: nil or false element ends iteration but that shouldn't be a
-  problem in case of validated sequence with digits and optional sign."
+(defn- seq-big-dec->num
   {:added "1.0.0"
    :tag Number}
-  [^clojure.lang.ISeq d]
-  (when-not (empty? d)
-    (loop [x (reverse d) r 0N i 1N]
-      (if (nil? x) r (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))))
+  [^clojure.lang.ISeq x
+   ^clojure.lang.BigInt r
+   ^clojure.lang.BigInt i]
+  (if (nil? x)
+    r
+    (let [v (first x)]
+      (if (= \. v)
+        (seq-big-dec->num (next x) (/ r i) (bigint 1))
+        (recur (next x) (+' r (*' v i)) (*' 10 i))))))
 
-(defn- long-seq-digits-dec->num
-  "Warning: nil or false element ends iteration but that shouldn't be a
-  problem in case of validated sequence with digits and optional sign."
+(defn- seq-dec->num2
   {:added "1.0.0"
    :tag Number}
-  [^clojure.lang.ISeq d]
-  (when-not (empty? d)
-    (loop [x (reverse d) r (double 0) i (long 1)]
-      (if (nil? x) r (let [v (first x)]
-                       (if (= \. v)
-                         (recur (next x) (/ r i) (long 1))
-                         (recur (next x) (+ r (* (double v) i))  (* 10 i))))))))
+  [^clojure.lang.ISeq x
+   ^long r
+   ^clojure.lang.BigInt i]
+  (if (nil? x)
+    r
+    (let [v (first x)]
+      (if (= \. v)
+        (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
+        (let [o (+ r (* v i))]
+          (if (> o Long/MAX_VALUE)
+            (seq-big-dec->num (next x) (bigint o) (*' 10 i))
+            (recur (next x) (long o) (*' 10 i))))))))
 
-(defn- long-seq-digits->num
+(defn- seq-dec->num
   "Warning: nil or false element ends iteration but that shouldn't be a
   problem in case of validated sequence with digits and optional sign."
   {:added "1.0.0"
@@ -343,7 +339,49 @@
   [^clojure.lang.ISeq d]
   (when-not (empty? d)
     (loop [x (reverse d) r (long 0) i (long 1)]
-      (if (nil? x) r (recur (next x) (+ r (* (long (first x)) i)) (* 10 i))))))
+      (if (nil? x)
+        r
+        (let [v (first x)]
+          (if (= \. v)
+            (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
+            (if (>= i long-before)
+              (seq-dec->num2 x r (bigint i))
+              (recur (next x) (+ r (* ^long v i)) (* 10 i)))))))))
+
+(defn- seq-big->num
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq x
+   ^clojure.lang.BigInt r
+   ^clojure.lang.BigInt i]
+  (if (nil? x) r (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))
+
+(defn- seq-long->num2
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq x
+   ^long r
+   ^clojure.lang.BigInt i]
+  (if (nil? x)
+    r
+    (let [o (+ r (* (first x) i))]
+      (if (> o Long/MAX_VALUE)
+        (seq-big->num (next x) (bigint o) (*' 10 i))
+        (recur (next x) (long o) (*' 10 i))))))
+
+(defn- seq-long->num
+  "Warning: nil or false element ends iteration but that shouldn't be a
+  problem in case of validated sequence with digits and optional sign."
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq d]
+  (when-not (empty? d)
+    (loop [x (reverse d) r (long 0) i (long 1)]
+      (if (nil? x)
+        r
+        (if (>= i long-before)
+          (seq-long->num2 x r (bigint i))
+          (recur (next x) (+ r (* ^long (first x) i)) (* 10 i)))))))
 
 (defn- seq-digits->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -353,14 +391,8 @@
   [^clojure.lang.ISeq coll]
   (let [is-minus? (contains? *minus-chars* (first coll))
         coll      (if is-minus? (next coll) coll)
-        is-big?   (seq-digits-big? coll)
-        r         ((if is-big?
-                     (if *decimal-point-mode* big-seq-digits-dec->num big-seq-digits->num)
-                     (if *decimal-point-mode* long-seq-digits-dec->num long-seq-digits->num))
-                   coll)]
-    (if is-minus?
-      (if is-big? (*' -1 r) (* -1 r))
-      r)))
+        r         ((if *decimal-point-mode* seq-dec->num seq-long->num) coll)]
+    (if is-minus? (*' -1 r) r)))
 
 (defn- seq-digits->str
   {:added "1.0.0"
@@ -371,91 +403,94 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Normalization and validation
 
-(defn- digitize-num-core
+(defn- digitize-core-fn
   {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  [^clojure.lang.ISeq src
-   ^Boolean had-number?
-   ^Boolean had-point?
+   :tag clojure.lang.Fn}
+  [^Boolean numeric-version
    ^clojure.lang.Fn f-notempty
    ^clojure.lang.Fn f-first
    ^clojure.lang.Fn f-next]
-  (when (f-notempty src)
-    (let [e (f-first src)
-          e (if (string? e) (str-trim e) e)
-          n (f-next src)]
-      (if (dfl-whitechar? e)
-        (recur n had-number? had-point? f-notempty f-first f-next)
-        (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-seq-num-core n true had-point? f-notempty f-first f-next)))
-          (if-let [c (*sign-to-char* e)]
-            (if-not had-number?
-              (cons c (lazy-seq (digitize-seq-num-core n true had-point? f-notempty f-first f-next)))
-              (dig-throw-arg "The sign of a number should occur once and precede any digit"))
-            (if *decimal-point-mode*
-              (if (contains? *decimal-point-chars* e)
-                (if had-point?
-                  (dig-throw-arg "The decimal point character should occur just once")
-                  (cons \. (lazy-seq (digitize-seq-num-core n had-number? true f-notempty f-first f-next))))
-                (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
-              (if (contains? *decimal-point-chars* e)
-                (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
-                (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))
+  (if numeric-version
+    (fn digitize-core-num
+      [^clojure.lang.ISeq src
+       ^Boolean had-number?
+       ^Boolean had-point?]
+      (when (f-notempty src)
+        (let [e (f-first src)
+              e (if (string? e) (str-trim e) e)
+              n (f-next src)]
+          (if (dfl-whitechar? e)
+            (recur n had-number? had-point?)
+            (if-let [c (*chars-to-digits* e)]
+              (cons c (lazy-seq (digitize-core-num n true had-point?)))
+              (if-let [c (*sign-to-char* e)]
+                (if-not had-number?
+                  (cons c (lazy-seq (digitize-core-num n true had-point?)))
+                  (dig-throw-arg "The sign of a number should occur once and precede any digit"))
+                (if *decimal-point-mode*
+                  (if (contains? *decimal-point-chars* e)
+                    (if had-point?
+                      (dig-throw-arg "The decimal point character should occur just once")
+                      (cons \. (lazy-seq (digitize-core-num n had-number? true))))
+                    (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
+                  (if (contains? *decimal-point-chars* e)
+                    (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
+                    (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))
+    (fn digitize-core
+      [^clojure.lang.ISeq src
+       ^clojure.lang.Fn sep-pred]
+      (when (f-notempty src)
+        (let [e (f-first src)
+              n (f-next src)]
+          (if (dfl-whitechar? e)
+            (recur n sep-pred)
+            (if-let [c (*chars-to-digits* e)]
+              (cons c (lazy-seq (digitize-core n)))
+              (if (sep-pred e)
+                (cons e (lazy-seq (digitize-core n)))
+                (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))
 
-(defn- digitize-core
+(defn- digitize-fn
   {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  [^clojure.lang.ISeq     src
-   ^clojure.lang.Fn  sep-pred
-   ^clojure.lang.Fn   f-notempty
-   ^clojure.lang.Fn   f-first
-   ^clojure.lang.Fn   f-next]
-  (when (f-notempty src)
-    (let [e (f-first src)
-          n (f-next src)]
-      (if (dfl-whitechar? e)
-        (recur n sep-pred f-notempty f-first f-next)
-        (if-let [c (*chars-to-digits* e)]
-          (cons c (lazy-seq (digitize-core n f-notempty f-first f-next)))
-          (if (sep-pred e)
-            (cons e (lazy-seq (digitize-seq-core n f-notempty f-first f-next)))
-            (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))
+   :tag clojure.lang.Fn}
+  [^clojure.lang.Fn f-notempty
+   ^clojure.lang.Fn f-first
+   ^clojure.lang.Fn f-next]
+  (let [dcore     (digitize-core-fn false f-notempty f-first f-next)
+        dcore-num (digitize-core-fn true  f-notempty f-first f-next)]
+    (fn digitize-generic
+      ([src
+        ^Number num-drop
+        ^Number num-take]
+       (let [r (digitize-generic src)]
+         (if *numeric-mode*
+           (subseq-signed r num-drop num-take)
+           (safe-subseq   r num-drop (+ num-take num-drop)))))
+      ([src
+        ^Number num-take]
+       (digitize-generic src 0 num-take))
+      ([src]
+       (if *numeric-mode*
+         (fix-sign-seq (dcore-num src false false))
+         (dcore src dfl-separator))))))
 
-(defn- digitize-seq
-  {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  ([^clojure.lang.ISeq src
-    ^Number       num-drop
-    ^Number       num-take]
-   (let [r (digitize-seq src)]
-     (if *numeric-mode*
-       (subseq-signed r num-drop num-take)
-       (safe-subseq   r num-drop (+ num-take num-drop)))))
-  ([^clojure.lang.ISeq src
-    ^Number       num-take]
-   (digitize-seq src 0 num-take))
-  ([^clojure.lang.ISeq src]
-   (if *numeric-mode*
-     (fix-sign-seq (digitize-num-core src false false (comp not empty?) first next))
-     (digitize-core src dfl-separator (comp not empty?) first next))))
+(def ^{:added "1.0.0"
+       :private true
+       :tag clojure.lang.ISeq
+       :arglists '([^clojure.lang.ISeq coll]
+                   [^clojure.lang.ISeq coll, ^Number num-take]
+                   [^clojure.lang.ISeq coll, ^Number num-drop, ^Number num-take])}
+  digitize-seq
+  (digitize-fn (comp not empty?) first next))
 
-(defn- digitize-vec
-  {:added "1.0.0"
-   :tag clojure.lang.LazySeq}
-  ([^clojure.lang.IPersistentVector src
-    ^Number                    num-drop
-    ^Number                    num-take]
-   (let [r (digitize-vec src)]
-     (if *numeric-mode*
-       (subseq-signed r num-drop num-take)
-       (safe-subseq   r num-drop (+ num-take num-drop)))))
-  ([^clojure.lang.IPersistentVector src
-    ^Number                    num-take]
-   (digitize-vec src 0 num-take))
-  ([^clojure.lang.IPersistentVector src]
-   (if *numeric-mode*
-     (fix-sign-seq (digitize-num-core src false #(contains? % 0) #(get % 0) #(subvec % 1)))
-     (digitize-core src dfl-separator #(contains? % 0) #(get % 0) #(subvec % 1)))))
+(def ^{:added "1.0.0"
+       :private true
+       :tag clojure.lang.ISeq
+       :arglists '([^clojure.lang.IPersistentVector coll]
+                   [^clojure.lang.IPersistentVector coll, ^Number num-take]
+                   [^clojure.lang.IPersistentVector coll, ^Number num-drop, ^Number num-take])}
+  digitize-vec
+  (digitize-fn #(contains? % 0) #(get % 0) #(subvec % 1)))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
