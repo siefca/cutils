@@ -137,6 +137,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
 
+(defn pow
+  "Calculates x to the power of n."
+  {:added "1.0.0"
+   :tag clojure.lang.BigInt}
+  [x n]
+  (try
+    (.pow (BigInteger/valueOf x) n)
+    (catch Exception e
+      (try
+        (.pow (BigInteger. (str x)) n)
+        (catch Exception e
+          (loop [r (bigint 1) n (bigint n)]
+            (if (zero? n) r (recur (*' x r) (dec n)))))))))
+
+(defn count-digits
+  "Counts digits for the given number. Returns the number of digits."
+  [^clojure.lang.BigInt n]
+  {:added "1.0.0"}
+  (if (zero? n)
+    1
+    (let [r (inc (bigint (Math/log10 (if (neg? n) (*' -1 n) n))))]
+      (if (> r Long/MAX_VALUE) r (long r)))))
+
 (defn- dig-throw-arg
   "Throws argument exception when *digitization-throws* is not false nor nil."
   {:added "1.0.0"
@@ -241,15 +264,17 @@
 ;; Conversions
 
 (defn num->digits-core
-  "Changes a number given as n into a sequence of numbers representing decimal
-  digits (in reverse order for positive values). Returns a sequence of two
-  elements: first is a number of digits and second is a lazy sequence."
+  "Changes a number given as n into a lazy sequence of numbers representing
+  decimal digits (in reverse order for positive values). Returns a sequence of
+  two elements: first is a number of digits and second is a sequence."
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
-  [^Number n]
-  (when-not (zero? n)
-    (lazy-seq
-     (cons (num->digits-core (quot n 10)) (mod n 10)))))
+  ([^Number n]
+   (num->digits-core n (pow 10 (count-digits n))))
+  ([^Number n div-by]
+   (when-not (zero? n)
+     (lazy-seq
+      (cons (mod n div-by) (num->digits-core (quot n div-by) (/ div-by 10)))))))
 
 ;; FIXME!!!
 
