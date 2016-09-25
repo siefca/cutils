@@ -217,11 +217,11 @@
    :tag String}
   ([^String     s
     ^Number start]
-   (subs-preserve s *sign-chars* start))
+   (not-empty (subs-preserve s *sign-chars* start)))
   ([^String     s
     ^Number start
     ^Number   num]
-   (subs-preserve s *sign-chars* start (+ start num))))
+   (not-empty (subs-preserve s *sign-chars* start (+ start num)))))
 
 (defn- subseq-signed
   "Safely creates a sequence preserving its first character when it is a plus
@@ -232,11 +232,11 @@
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
     ^Number     num-drop]
-   (subseq-preserve s *sign-chars* num-drop))
+   (not-empty (subseq-preserve s *sign-chars* num-drop)))
   ([^clojure.lang.ISeq s
     ^Number     num-drop
     ^Number     num-take]
-   (subseq-preserve s *sign-chars* num-drop (+ num-take num-drop))))
+   (not-empty (subseq-preserve s *sign-chars* num-drop (+ num-take num-drop)))))
 
 (defn- subvec-signed
   "Safely creates a subvector preserving its first element when it is a plus
@@ -247,11 +247,11 @@
    :tag clojure.lang.IPersistentVector}
   ([^clojure.lang.IPersistentVector v
     ^Number start]
-   (subvec-preserve v *sign-chars* start))
+   (not-empty (subvec-preserve v *sign-chars* start)))
   ([^clojure.lang.IPersistentVector v
     ^Number start
     ^Number   num]
-   (subvec-preserve v *sign-chars* start (+ start num))))
+   (not-empty (subvec-preserve v *sign-chars* start (+ start num)))))
 
 (defn- fix-sign-seq
   "Removes plus character from the head of a sequential collection."
@@ -454,7 +454,7 @@
                (if-let [c (*sign-to-char* e)]
                  (if-not had-number?
                    (cons c (digitize-core-num n true had-point?))
-                   (dig-throw-arg "The sign of a number should occur once and precede any digit"))
+                   (dig-throw-arg "The sign of a number should occur once and precede first digit"))
                  (if *decimal-point-mode*
                    (if (contains? *decimal-point-chars* e)
                      (if had-point?
@@ -528,7 +528,7 @@
   [^Number n]
   (when (digital-number? n) n))
 
-(defn digitize-char
+(defn- digitize-char
   "Changes numeric character into normalized representation. Returns
   a digit or nil."
   {:added "1.0.0"
@@ -714,13 +714,13 @@
     ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
     ([^Character   c, ^Number nd, ^Number nt]                      (subseq-signed (digits->seq c) nd nt)))
   (digits->str
-      ([^Character c]                                              (str (digitize-char c)))
-    ([^Character   c, ^Number nt]                                  (subs-signed (digits->seq c) 0 nt))
-    ([^Character   c, ^Number nd, ^Number nt]                      (subs-signed (digits->seq c) nd nt)))
+      ([^Character c]                                              (not-empty (str (digitize-char c))))
+    ([^Character   c, ^Number nt]                                  (subs-signed (digits->str c) 0 nt))
+    ([^Character   c, ^Number nd, ^Number nt]                      (subs-signed (digits->str c) nd nt)))
   (digits->num
-      ([^Character c]                                              (Integer/parseInt (digitize-char c)))
-    ([^Character   c, ^Number nt]                                  (Integer/parseInt (digits->str c nt)))
-    ([^Character   c, ^Number nd, ^Number nt]                      (Integer/parseInt (digits->str c nd nt))))
+      ([^Character c]                                              (some-> (digitize-char c) int))
+    ([^Character   c, ^Number nt]                                  (some-> (digits->str c nt) Integer/parseInt))
+    ([^Character   c, ^Number nd, ^Number nt]                      (some-> (digits->str c nd nt) Integer/parseInt)))
   (slice-digits
       ([^Character c, ^Number st]                                  (subs-signed (str (digitize-char c)) st))
     ([^Character   c, ^Number st, ^Number nt]                      (subs-signed (str (digitize-char c)) st nt)))
