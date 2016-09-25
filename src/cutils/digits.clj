@@ -14,8 +14,8 @@
 
 ;; TODO:
 ;;
+;; - add keyword and symbol handling
 ;; - fix single number conv to seq (*spread-numbers*)
-;; - fix conv. to seq
 ;; - countable lazy sequence
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -35,7 +35,7 @@
   optional decimal point character and a single preceding sign characters are
   allowed. If numeric mode is disabled then separators are allowed but you may
   get strange results when converting to numbers (all separators and white
-  characters are omited)."
+  characters are omitted)."
   true)
 
 (def ^{:added "1.0.0"
@@ -188,8 +188,8 @@
   "Returns true if the given value is a character and is a separator."
   {:added "1.0.0"
    :tag Boolean}
-  [c]
-  (and (char? c) (contains? *separator-classes* (.getType c))))
+  [^Character c]
+  (and (char? c) (contains? *separator-classes* (Character/getType ^char c))))
 
 (def ^{:added "1.0.0"
        :tag Boolean
@@ -263,22 +263,32 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
-(defn num->digits-core
+(defn- num->digits-core
   "Changes a number given as n into a lazy sequence of numbers representing
   decimal digits (in reverse order for positive values). Returns a sequence of
   two elements: first is a number of digits and second is a sequence."
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   ([^Number n]
-   (num->digits-core n (pow 10 (count-digits n))))
-  ([^Number n div-by]
-   (when-not (zero? n)
+   (when n
+     (if (zero? n)
+       (lazy-seq (cons 0 nil))
+       (num->digits-core n (pow 10 (dec (count-digits n)))))))
+  ([^Number n
+    ^Number div-by]
+   (if (zero? n)
+     (if (> div-by 0)
+       (lazy-seq
+        (cons
+         (byte 0)
+         (num->digits-core 0 (quot div-by 10))))
+       nil)
      (lazy-seq
-      (cons (mod n div-by) (num->digits-core (quot n div-by) (/ div-by 10)))))))
+      (cons
+       (byte (quot n div-by))
+       (num->digits-core (mod n div-by) (quot div-by 10)))))))
 
-;; FIXME!!!
-
-(defn- num->digits
+(defn num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
   digits. If min-digits argument is given and it is larger than the number of
   digits then it pads the returned sequence with leading zeros to satisfy the
@@ -292,18 +302,10 @@
   ([^Number n]
    (lazy-seq
     (if (neg? n)
-      (cons \- (num->digits-core n))
+      (cons \- (num->digits-core (*' -1 n)))
       (if (zero? n)
         (cons 0 nil)
-        (num->digits-core (*' -1 n))))))
-  ([^Number n
-    ^Number min-digits]
-   (let [d (num->digits n)
-         f (first d)]
-     (lazy-seq
-      (if (digital-number? f)
-        (pad d min-digits 0 true)
-        (cons f (pad (next d) (dec min-digits) 0 true)))))))
+        (num->digits-core n))))))
 
 (def ^{:added "1.0.0"
        :const true
@@ -446,21 +448,22 @@
               n (f-next src)]
           (if (dfl-whitechar? e)
             (recur n had-number? had-point?)
-            (if-let [c (*chars-to-digits* e)]
-              (cons c (lazy-seq (digitize-core-num n true had-point?)))
-              (if-let [c (*sign-to-char* e)]
-                (if-not had-number?
-                  (cons c (lazy-seq (digitize-core-num n true had-point?)))
-                  (dig-throw-arg "The sign of a number should occur once and precede any digit"))
-                (if *decimal-point-mode*
-                  (if (contains? *decimal-point-chars* e)
-                    (if had-point?
-                      (dig-throw-arg "The decimal point character should occur just once")
-                      (cons \. (lazy-seq (digitize-core-num n had-number? true))))
-                    (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
-                  (if (contains? *decimal-point-chars* e)
-                    (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
-                    (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))
+            (lazy-seq
+             (if-let [c (*chars-to-digits* e)]
+               (cons c (digitize-core-num n true had-point?))
+               (if-let [c (*sign-to-char* e)]
+                 (if-not had-number?
+                   (cons c (digitize-core-num n true had-point?))
+                   (dig-throw-arg "The sign of a number should occur once and precede any digit"))
+                 (if *decimal-point-mode*
+                   (if (contains? *decimal-point-chars* e)
+                     (if had-point?
+                       (dig-throw-arg "The decimal point character should occur just once")
+                       (cons \. (digitize-core-num n had-number? true)))
+                     (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
+                   (if (contains? *decimal-point-chars* e)
+                     (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
+                     (dig-throw-arg "Sequence element is not a single digit nor a sign: " e))))))))))
     (fn digitize-core
       [^clojure.lang.ISeq src
        ^clojure.lang.Fn sep-pred]
@@ -469,11 +472,12 @@
               n (f-next src)]
           (if (dfl-whitechar? e)
             (recur n sep-pred)
-            (if-let [c (*chars-to-digits* e)]
-              (cons c (lazy-seq (digitize-core n)))
-              (if (sep-pred e)
-                (cons e (lazy-seq (digitize-core n)))
-                (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))
+            (lazy-seq
+             (if-let [c (*chars-to-digits* e)]
+               (cons c (digitize-core n))
+               (if (sep-pred e)
+                 (cons e (digitize-core n))
+                 (dig-throw-arg "Sequence element is not a single digit nor a separator: " e))))))))))
 
 (defn- digitize-fn
   {:added "1.0.0"
