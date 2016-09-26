@@ -14,7 +14,6 @@
 
 ;; TODO:
 ;;
-;; - add keyword and symbol handling
 ;; - fix single number conv to seq (*spread-numbers*)
 ;; - countable lazy sequence
 
@@ -702,6 +701,54 @@
     ([^String   s, ^Number st, ^Number nt]                         (subs-signed s st nt)))
   (negative?
       [^String  s]                                                 (contains? *minus-chars* (first s)))
+
+  clojure.lang.Symbol
+
+  (digitize
+      [^clojure.lang.Symbol  s]                                    (digitize (str s)))
+  (digital?
+      [^clojure.lang.Symbol  s]                                    (digital? (str s)))
+  (digits->seq
+      ([^clojure.lang.Symbol s]                                    (digits->seq (str s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->seq (str s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->seq (str s) nd nt)))
+  (digits->str
+      ([^clojure.lang.Symbol s]                                    (digits->str (str s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->str (str s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->str (str s) nd nt)))
+  (digits->num
+      ([^clojure.lang.Symbol s]                                    (digits->num (str s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->num (str s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->num (str s) nd nt)))
+  (slice-digits
+      ([^clojure.lang.Symbol s, ^Number st]                        (slice-digits (str s) st))
+    ([^clojure.lang.Symbol   s, ^Number st, ^Number nt]            (slice-digits (str s) st nt)))
+  (negative?
+      [^clojure.lang.Symbol  s]                                    (negative? (str s)))
+
+  clojure.lang.Keyword
+
+  (digitize
+      [^clojure.lang.Keyword  s]                                   (digitize (str s)))
+  (digital?
+      [^clojure.lang.Keyword  s]                                   (digital? (str s)))
+  (digits->seq
+      ([^clojure.lang.Keyword s]                                   (digits->seq (str s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->seq (str s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->seq (str s) nd nt)))
+  (digits->str
+      ([^clojure.lang.Keyword s]                                   (digits->str (str s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->str (str s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->str (str s) nd nt)))
+  (digits->num
+      ([^clojure.lang.Keyword s]                                   (digits->num (str s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->num (str s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->num (str s) nd nt)))
+  (slice-digits
+      ([^clojure.lang.Keyword s, ^Number st]                       (slice-digits (str s) st))
+    ([^clojure.lang.Keyword   s, ^Number st, ^Number nt]           (slice-digits (str s) st nt)))
+  (negative?
+      [^clojure.lang.Keyword  s]                                   (negative? (str s)))
 
   java.lang.Character
 
