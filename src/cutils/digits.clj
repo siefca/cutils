@@ -157,7 +157,7 @@
   (if (zero? n)
     1
     (let [r (inc (bigint (Math/log10 (if (neg? n) (*' -1 n) n))))]
-      (if (> r Long/MAX_VALUE) r (long r)))))
+      (if (or (> r Long/MAX_VALUE) (< r Long/MIN_VALUE)) r (long r)))))
 
 (defn- dig-throw-arg
   "Throws argument exception when *digitization-throws* is not false nor nil."
@@ -353,7 +353,7 @@
       (if (= \. v)
         (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
         (let [o (+ r (* v i))]
-          (if (> o Long/MAX_VALUE)
+          (if (or (> o Long/MAX_VALUE) (< o Long/MIN_VALUE))
             (seq-big-dec->num (next x) (bigint o) (*' 10 i))
             (recur (next x) (long o) (*' 10 i))))))))
 
@@ -391,7 +391,7 @@
   (if (nil? x)
     r
     (let [o (+ r (* (first x) i))]
-      (if (> o Long/MAX_VALUE)
+      (if (or (> o Long/MAX_VALUE) (< o Long/MIN_VALUE))
         (seq-big->num (next x) (bigint o) (*' 10 i))
         (recur (next x) (long o) (*' 10 i))))))
 
@@ -509,7 +509,7 @@
                    [^clojure.lang.ISeq coll, ^Number num-take]
                    [^clojure.lang.ISeq coll, ^Number num-drop, ^Number num-take])}
   digitize-seq
-  (digitize-fn (comp not empty?) first next))
+  (digitize-fn (complement empty?) first next))
 
 (def ^{:added "1.0.0"
        :private true
