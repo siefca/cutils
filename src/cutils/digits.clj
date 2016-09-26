@@ -510,7 +510,7 @@
                    [^clojure.lang.ISeq coll, ^Number num-take]
                    [^clojure.lang.ISeq coll, ^Number num-drop, ^Number num-take])}
   digitize-seq
-  (digitize-fn (comp not empty?) first next))
+  (digitize-fn (complement empty?) first next))
 
 (def ^{:added "1.0.0"
        :private true
