@@ -287,15 +287,9 @@
        (byte (quot n div-by))
        (num->digits-core (mod n div-by) (quot div-by 10)))))))
 
-(defn num->digits
+(defn- num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
-  digits. If min-digits argument is given and it is larger than the number of
-  digits then it pads the returned sequence with leading zeros to satisfy the
-  number of elements with a first element preserved (and not counted) if it's
-  not a digit.
-
-  Be aware that in the second case the values of sequence
-  elements will be evaluated in order to know their count."
+  digits."
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   ([^Number n]
@@ -606,11 +600,18 @@
   num-drop tells how many digits to drop before collecting number. The last
   one (num-drop) is applied before num-take when both are given.
 
+  If num-take is given and it is larger than the number of digits then it pads
+  the returned sequence with leading zeros to satisfy the number of elements
+  with a first element preserved (and not counted) if it's not a digit.
+
   Before slicing the collection is normalized (white characters are removed
   and digits are changed into numerical representation) and validated (if the
   collection contains other characters operation is stopped and nil is
   returned). The first plus or minus character will not be taken into account
   during slicing.
+
+  Be aware that when this function is called with 2 or 3 arguments the values
+  of sequence elements will be evaluated in order to know their count.
 
   The function returns a sequence or nil if something went wrong (e.g. empty
   collection was given or ranges were mismatched).")

@@ -10,6 +10,10 @@
 
 (cutils.core/init)
 
+;; TODO:
+;; - fix ranges (off-by-one) for substrings and subvectors,
+;; - fix sign preservation for substrings, check for others
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Range helpers
 
@@ -73,19 +77,17 @@
 (defn safe-subseq
   "Returns an empty sequence if positions given as start and end are
   cancelling each other out. It fixes the positions if they are lower or
-  higher than the size of the given sequence.
-
-  Be aware that if end is not given it will be counted using the count
-  function which might be inefficient for some data structures."
+  higher than the size of the given sequence."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
     ^Number start]
-   (safe-subseq s start (count s)))
+   (drop start s))
   ([^clojure.lang.ISeq s
     ^Number start
     ^Number end]
-   (take (- end start) (drop start s))))
+   (let [start (if (< start 0) 0 start)]
+     (take (- (inc end) start) (drop start s)))))
 
 (defn subseq-preserve
   "Takes a sequence s, a set of objects p and a range of elements expressed
@@ -104,7 +106,13 @@
   ([^clojure.lang.ISeq           s
     ^clojure.lang.IPersistentSet p
     ^java.lang.Number        start]
-   (subseq-preserve s p start (dec (count s))))
+   (if (empty? s)
+     s
+     (let [f (first s)]
+       (if (contains? p f)
+         (if-some [r (not-empty (safe-subseq (next s) start))]
+           (cons f r) ())
+         (safe-subseq s start)))))
   ([^clojure.lang.ISeq           s
     ^clojure.lang.IPersistentSet p
     ^java.lang.Number        start
@@ -113,8 +121,8 @@
      s
      (let [f (first s)]
        (if (contains? p f)
-         (let [r (safe-subseq s (inc start) (inc end))]
-           (if (empty? r) r (cons f r)))
+         (if-some [r (not-empty (safe-subseq (next s) start end))]
+           (cons f r) ())
          (safe-subseq s start end))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -158,6 +166,8 @@
          (let [r (safe-subs s (inc start) (inc end))]
            (if (empty? r) r (str f r)))
          (safe-subs s start end))))))
+
+;; FIXME (subs-preserve "-1234" -1111 3)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Vector operations
@@ -208,7 +218,7 @@
   returns the result with the memorized element added to the beginning of a
   vector. It doesn't add the element if the resulting vector is empty.
 
-  The function does not create empty vectors to collect parsed
+  The function does not create new, empty vectors to collect parsed
   data. Internally it uses subvec and assoc on original structure."
   {:added "1.0.0"
    :tag clojure.lang.IPersistentVector}
