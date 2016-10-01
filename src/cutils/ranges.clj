@@ -10,8 +10,6 @@
 
 (cutils.core/init)
 
-;; TODO:
-;; - fix ranges (off-by-one) for substrings and subvectors,
 ;; - fix sign preservation for substrings, check for others
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -37,7 +35,7 @@
     obj
     ^java.lang.Number start]
    (let [co (count obj)
-         st (if (> start co) co (if (< start 0) 0 start))]
+         st (if (>= start co) co (if (< start 0) 0 start))]
      (f obj st)))
   ([^clojure.lang.Fn f
     obj
@@ -46,8 +44,8 @@
    (if (>= start end)
      (f obj 0 0)
      (let [co (count obj)
-           st (if (> start co) co (if (< start 0) 0 start))
-           en (if (> end   co) co end)]
+           st (if (< start 0) 0 (if (>= start co) co start))
+           en (if (>= end co) co (if (< end 0) 0 end))]
        (f obj st en)))))
 
 (defn safe-range-fn
@@ -86,8 +84,10 @@
   ([^clojure.lang.ISeq s
     ^Number start
     ^Number end]
-   (let [start (if (< start 0) 0 start)]
-     (take (- (inc end) start) (drop start s)))))
+   (if (>= start end)
+     (take 0 s)
+     (let [start (if (< start 0) 0 start)]
+       (take (- end start) (drop start s))))))
 
 (defn subseq-preserve
   "Takes a sequence s, a set of objects p and a range of elements expressed
@@ -111,7 +111,7 @@
      (let [f (first s)]
        (if (contains? p f)
          (if-some [r (not-empty (safe-subseq (next s) start))]
-           (cons f r) ())
+           (cons f r) (take 0 s))
          (safe-subseq s start)))))
   ([^clojure.lang.ISeq           s
     ^clojure.lang.IPersistentSet p
@@ -122,7 +122,7 @@
      (let [f (first s)]
        (if (contains? p f)
          (if-some [r (not-empty (safe-subseq (next s) start end))]
-           (cons f r) ())
+           (cons f r) (take 0 s))
          (safe-subseq s start end))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,3 +240,16 @@
              (empty v)
              (safe-subvec (assoc v start f) start (inc end))))
          (safe-subvec v start end))))))
+
+
+;; user=> (cutils.ranges/safe-subs (apply str x) -10 -2)
+;; java.lang.StringIndexOutOfBoundsException: String index out of range: -2
+
+;; user=> (cutils.ranges/safe-subseq (apply str x) -10 -2)
+;; ()
+
+;; user=> (cutils.ranges/safe-subvec (vec x) -10 -2)
+;; java.lang.IndexOutOfBoundsException:
+
+;; user=> (cutils.ranges/subs-preserve (apply str x) #{\- \+} -2 4)
+;; "--1234"
