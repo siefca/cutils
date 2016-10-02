@@ -15,9 +15,10 @@
 
 (defn safe-range
   "Range-safe wrapper for functions that require ranges. It fixes the given
-  start and end values if they are lower or higher than a size of the given
-  object. After that it calls the function f with proper values passed as
-  arguments.
+  start and end values if they are lower or higher than the size of the given
+  collection. After that it calls the function f with proper values passed as
+  arguments. If three arguments are given the start argument is a number of
+  collection's first elements that are going to be dropped.
 
   The function f must be able to take 2 or 3 arguments: object, start of
   a range and (optionally) end of a range. The given object must be
@@ -72,10 +73,12 @@
 
 (defn safe-subseq
   "Returns an empty sequence if positions given as start and end are
-  cancelling each other out or are out of boundaries. Positions are counted
-  from 0 and are determining the range which is left-closed (first element
-  pointed by start position is included) and right-closed (last element
-  pointed by end position is excluded), similarly to clojure.core/subs."
+  cancelling each other out and fixes them if they're exceeding the
+  boundaries. Positions are counted from 0 and are determining the range which
+  is left-closed (first element pointed by start position is included) and
+  right-open (last element pointed by end position is excluded) similarly to
+  clojure.core/subs. If two arguments are given the start argument is a number
+  of first elements to drop."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
@@ -91,12 +94,14 @@
 
 (defn subseq-preserve
   "Takes a sequence s, a set of objects p and a range of elements expressed
-  with start and end. Returns an empty sequence if positions given as start
-  and end are cancelling each other out or are out of boundaries. Positions
-  are counted from 0 and are determining the range which is left-closed (first
-  element pointed by start position is included) and right-closed (last
-  element pointed by end position is excluded), similarly to
-  clojure.core/subs.
+  with start and (optional) end. Returns an empty sequence if positions given
+  as start and end are cancelling each other out and fixes them if they're
+  exceeding the boundaries. Positions are counted from 0 and are determining
+  the range which is left-closed (first element pointed by start position is
+  included) and right-open (last element pointed by end position is
+  excluded), similarly to clojure.core/subs. If two arguments are given the
+  start argument is a number of first elements to drop (excluding preserved
+  element, if any).
 
   Before returning new sequence it memorizes first element of the given
   sequence if it matches one of the elements from p. If there is no match the
@@ -133,24 +138,28 @@
 ;; String operations
 
 (def ^{:added "1.0.0"
+       :arglists '([^String s, ^Number start]
+                   [^String s, ^Number start, ^Number end])
        :tag String}
   safe-subs
   "Range-safe version of clojure.core/subs. Returns an empty string if
-  positions given as start and end are cancelling each other out or are out of
-  boundaries. Positions are counted from 0 and are determining the range which
-  is left-closed (first element pointed by start position is included) and
-  right-closed (last element pointed by end position is excluded), similarly
-  to clojure.core/subs."
+  positions given as start and end are cancelling each other out and fixes
+  them if they're exceeding the boundaries. Positions are counted from 0 and
+  are determining the range which is left-closed (first element pointed by
+  start position is included) and right-open (last element pointed by end
+  position is excluded) similarly to clojure.core/subs. If two arguments are
+  given the start argument is a number of first elements to drop."
   (safe-range-fn subs))
 
 (defn subs-preserve
   "Range-safe version of clojure.core/subs with first character
   preservation. Returns an empty string if positions given as start and end
-  are cancelling each other out or are out of boundaries. Positions are
-  counted from 0 and are determining the range which is left-closed (first
-  element pointed by start position is included) and right-closed (last
-  element pointed by end position is excluded), similarly to
-  clojure.core/subs.
+  are cancelling each other out and fixes them if they're exceeding the
+  boundaries. Positions are counted from 0 and are determining the range which
+  is left-closed (first element pointed by start position is included) and
+  right-open (last element pointed by end position is excluded) similarly to
+  clojure.core/subs. If two arguments are given the start argument is a number
+  of first elements to drop (excluding preserved character, if any).
 
   Before generating substring it memorizes original string's first character
   if it matches one of the characters from a given set p. If there is no match
@@ -211,24 +220,28 @@
        nil))))
 
 (def ^{:added "1.0.0"
+       :arglists '([^clojure.lang.IPersistentVector v, ^Number start]
+                   [^clojure.lang.IPersistentVector v, ^Number start, ^Number end])
        :tag clojure.lang.IPersistentVector}
   safe-subvec
   "Range-safe version of clojure.core/subvec. Returns an empty vector if
-  positions given as start and end are cancelling each other out or are out of
-  boundaries. Positions are counted from 0 and are determining the range which
-  is left-closed (first element pointed by start position is included) and
-  right-closed (last element pointed by end position is excluded), similarly
-  to clojure.core/subs."
+  positions given as start and end are cancelling each other out and fixes
+  them if they're exceeding the boundaries. Positions are counted from 0 and
+  are determining the range which is left-closed (first element pointed by
+  start position is included) and right-open (last element pointed by end
+  position is excluded) similarly to clojure.core/subs. If two arguments are
+  given the start argument is a number of first elements to drop."
   (safe-range-fn subvec))
 
 (defn subvec-preserve
   "Range-safe version of clojure.core/subvec with first element
   preservation. Returns an empty vector if positions given as start and end
-  are cancelling each other out or are out of boundaries. Positions are
-  counted from 0 and are determining the range which is left-closed (first
-  element pointed by start position is included) and right-closed (last
-  element pointed by end position is excluded), similarly to
-  clojure.core/subs.
+  are cancelling each other out and fixes them if they're exceeding the
+  boundaries. Positions are counted from 0 and are determining the range which
+  is left-closed (first element pointed by start position is included) and
+  right-open (last element pointed by end position is excluded) similarly to
+  clojure.core/subs. If two arguments are given the start argument is a number
+  of first elements to drop (excluding preserved element, if any).
 
   Before generating new vector it memorizes original vector's first element if
   it matches one of the elements from a given set p. If there is no match the
@@ -264,3 +277,116 @@
            (if (contains? r 1) (assoc r 0 f) (empty v))
            (empty v))
          (safe-subvec v start end))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Sliceable protocol
+
+(defprotocol Sliceable
+  "States that collection is sliceable (can be safely, without errors,
+  sliced to sub-collecitons)."
+
+  (sub
+   [coll start] [coll start end]
+   "Produces a subcollection of coll. If two arguments are given the resulting
+  collection is a copy of the original collection with first elements
+  removed (with their count specified by the start argument). If three
+  arguments are given the last two specify a range which is left-closed (first
+  element pointed by start position is included) and right-open (last
+  element pointed by end position is excluded) similarly to clojure.core/subs.
+
+  Returns an empty string if positions given as start and end are cancelling
+  each other out. Increases or decreases the range if its out of boundaries.")
+
+  (sub-preserve
+   [coll to-keep start] [coll to-keep start end]
+   "Produces a subcollection of coll preserving first element if its value
+  belongs to a set passed as to-keep. If three arguments are given the
+  resulting collection is a copy of the original collection with first
+  elements removed (with their number specified by the start argument). If
+  four arguments are given the last two specify a range which is
+  left-closed (first element pointed by start position is included) and
+  right-open (last element pointed by end position is excluded) similarly to
+  clojure.core/subs.
+
+  Returns an empty string if positions given as start and end are cancelling
+  each other out. Increases or decreases the range if its out of boundaries."))
+
+(extend-protocol Sliceable
+
+  clojure.lang.IPersistentVector
+
+  (sub
+      ([^clojure.lang.IPersistentVector v
+        ^Number start]
+       (safe-subvec v start))
+    ([^clojure.lang.IPersistentVector v
+      ^Number start
+      ^Number end]
+     (safe-subvec v start end)))
+  (sub-preserve
+      ([^clojure.lang.IPersistentVector v
+        ^clojure.lang.IPersistentSet p
+        ^Number start]
+       (subvec-preserve v p start))
+    ([^clojure.lang.IPersistentVector v
+      ^clojure.lang.IPersistentSet p
+      ^Number start
+      ^Number end]
+     (subvec-preserve v start end)))
+
+  java.lang.String
+
+  (sub
+      ([^String s
+        ^Number start]
+       (safe-subs s start))
+    ([^String s
+      ^Number start
+      ^Number end]
+     (safe-subs s start end)))
+  (sub-preserve
+      ([^String s
+        ^clojure.lang.IPersistentSet p
+        ^Number start]
+       (subs-preserve s start))
+    ([^String s
+      ^clojure.lang.IPersistentSet p
+      ^Number start
+      ^Number end]
+     (subs-preserve s start end)))
+
+  clojure.lang.ISeq
+
+  (sub
+      ([^clojure.lang.ISeq s
+        ^Number start]
+       (safe-subseq s start))
+    ([^clojure.lang.ISeq s
+      ^Number start
+      ^Number end]
+     (safe-subseq s start end)))
+  (sub-preserve
+      ([^clojure.lang.ISeq s
+        ^clojure.lang.IPersistentSet p
+        ^Number start]
+       (subseq-preserve s start))
+    ([^clojure.lang.ISeq s
+      ^clojure.lang.IPersistentSet p
+      ^Number start
+      ^Number end]
+     (subseq-preserve s start end)))
+
+  nil
+
+  (sub
+      ([o start]        nil)
+    ([o start end]      nil))
+  (sub-preserve
+      ([o p start]      nil)
+    ([o p start end]    nil)))
+
+(defn sliceable? [coll]
+  "Returns true if coll satisfies the Sliceable protocol."
+  {:added "1.0.0"
+   :tag Boolean}
+  (satisfies? Sliceable coll))
