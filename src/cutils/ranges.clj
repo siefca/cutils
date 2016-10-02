@@ -10,8 +10,6 @@
 
 (cutils.core/init)
 
-;; - fix sign preservation for substrings, check for others
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Range helpers
 
@@ -74,8 +72,10 @@
 
 (defn safe-subseq
   "Returns an empty sequence if positions given as start and end are
-  cancelling each other out. It fixes the positions if they are lower or
-  higher than the size of the given sequence."
+  cancelling each other out or are out of boundaries. Positions are counted
+  from 0 and are determining the range which is left-closed (first element
+  pointed by start position is included) and right-closed (last element
+  pointed by end position is excluded), similarly to clojure.core/subs."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
@@ -92,7 +92,11 @@
 (defn subseq-preserve
   "Takes a sequence s, a set of objects p and a range of elements expressed
   with start and end. Returns an empty sequence if positions given as start
-  and end are cancelling each other out.
+  and end are cancelling each other out or are out of boundaries. Positions
+  are counted from 0 and are determining the range which is left-closed (first
+  element pointed by start position is included) and right-closed (last
+  element pointed by end position is excluded), similarly to
+  clojure.core/subs.
 
   Before returning new sequence it memorizes first element of the given
   sequence if it matches one of the elements from p. If there is no match the
@@ -131,16 +135,22 @@
 (def ^{:added "1.0.0"
        :tag String}
   safe-subs
-  "Range-safe version of clojure.core/subs. It returns an empty string if
-  positions given as start and end are cancelling each other out. It fixes the
-  positions if they are lower or higher than the size of the given string."
+  "Range-safe version of clojure.core/subs. Returns an empty string if
+  positions given as start and end are cancelling each other out or are out of
+  boundaries. Positions are counted from 0 and are determining the range which
+  is left-closed (first element pointed by start position is included) and
+  right-closed (last element pointed by end position is excluded), similarly
+  to clojure.core/subs."
   (safe-range-fn subs))
 
 (defn subs-preserve
   "Range-safe version of clojure.core/subs with first character
-  preservation. It returns an empty string if positions given as start and end
-  are cancelling each other out. It fixes the positions if they are lower or
-  higher than a size of the given string.
+  preservation. Returns an empty string if positions given as start and end
+  are cancelling each other out or are out of boundaries. Positions are
+  counted from 0 and are determining the range which is left-closed (first
+  element pointed by start position is included) and right-closed (last
+  element pointed by end position is excluded), similarly to
+  clojure.core/subs.
 
   Before generating substring it memorizes original string's first character
   if it matches one of the characters from a given set p. If there is no match
@@ -154,20 +164,24 @@
   ([^java.lang.String            s
     ^clojure.lang.IPersistentSet p
     ^java.lang.Number        start]
-   (subs-preserve s p start (dec (count s))))
+   (if (empty? s)
+     s
+     (let [f (get s 0)]
+       (if (contains? p f)
+         (if-some [r (not-empty (safe-subs (subs s 1) start))]
+           (str f r) (subs s 0 0))
+         (safe-subs s start)))))
   ([^java.lang.String            s
     ^clojure.lang.IPersistentSet p
     ^java.lang.Number        start
     ^java.lang.Number          end]
    (if (empty? s)
      s
-     (let [f (first s)]
+     (let [f (get s 0)]
        (if (contains? p f)
-         (let [r (safe-subs s (inc start) (inc end))]
-           (if (empty? r) r (str f r)))
+         (if-some [r (not-empty (safe-subs (subs s 1) start end))]
+           (str f r) (subs s 0 0))
          (safe-subs s start end))))))
-
-;; FIXME (subs-preserve "-1234" -1111 3)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Vector operations
@@ -199,17 +213,22 @@
 (def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentVector}
   safe-subvec
-  "Range-safe version of clojure.core/subvec. It returns an empty object of
-  the same type as v if positions given as start and end are cancelling each
-  other out. It fixes the positions if they are lower or higher than a size of
-  the given vector."
+  "Range-safe version of clojure.core/subvec. Returns an empty vector if
+  positions given as start and end are cancelling each other out or are out of
+  boundaries. Positions are counted from 0 and are determining the range which
+  is left-closed (first element pointed by start position is included) and
+  right-closed (last element pointed by end position is excluded), similarly
+  to clojure.core/subs."
   (safe-range-fn subvec))
 
 (defn subvec-preserve
   "Range-safe version of clojure.core/subvec with first element
-  preservation. It returns an empty vector if positions given as start and end
-  are cancelling each other out. It fixes the positions if they are lower or
-  higher than a size of the given vector.
+  preservation. Returns an empty vector if positions given as start and end
+  are cancelling each other out or are out of boundaries. Positions are
+  counted from 0 and are determining the range which is left-closed (first
+  element pointed by start position is included) and right-closed (last
+  element pointed by end position is excluded), similarly to
+  clojure.core/subs.
 
   Before generating new vector it memorizes original vector's first element if
   it matches one of the elements from a given set p. If there is no match the
@@ -225,31 +244,23 @@
   ([^clojure.lang.IPersistentVector v
     ^clojure.lang.IPersistentSet    p
     ^java.lang.Number           start]
-   (subvec-preserve v p start (count v)))
+   (if (empty? v)
+     v
+     (let [f (vec-first v)]
+       (if (contains? p f)
+         (if-some [r (not-empty (safe-subvec v start))]
+           (if (contains? r 1) (assoc r 0 f) (empty v))
+           (empty v))
+         (safe-subvec v start)))))
   ([^clojure.lang.IPersistentVector v
     ^clojure.lang.IPersistentSet    p
     ^java.lang.Number           start
     ^java.lang.Number             end]
-   (if (or (>= start end) (not (contains? v 0)))
-     (empty v)
-     (let [f (get v 0)]
+   (if (empty? v)
+     v
+     (let [f (vec-first v)]
        (if (contains? p f)
-         (let [last-idx (dec (count v))
-               start (if (< start 1) 0 start)]
-           (if (or (> start last-idx) (and (= start last-idx) (> end last-idx)))
-             (empty v)
-             (safe-subvec (assoc v start f) start (inc end))))
+         (if-some [r (not-empty (safe-subvec v start (inc end)))]
+           (if (contains? r 1) (assoc r 0 f) (empty v))
+           (empty v))
          (safe-subvec v start end))))))
-
-
-;; user=> (cutils.ranges/safe-subs (apply str x) -10 -2)
-;; java.lang.StringIndexOutOfBoundsException: String index out of range: -2
-
-;; user=> (cutils.ranges/safe-subseq (apply str x) -10 -2)
-;; ()
-
-;; user=> (cutils.ranges/safe-subvec (vec x) -10 -2)
-;; java.lang.IndexOutOfBoundsException:
-
-;; user=> (cutils.ranges/subs-preserve (apply str x) #{\- \+} -2 4)
-;; "--1234"
