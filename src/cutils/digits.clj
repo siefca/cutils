@@ -15,7 +15,6 @@
 ;; TODO:
 ;;
 ;; - fix single number conv to seq (*spread-numbers*)
-;; - countable lazy sequence
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
@@ -819,3 +818,11 @@
   (slice-digits
       ([d st]  nil)
     ([d st nt] nil)))
+
+(defn digitizing?
+  "Returns true if coll satisfies the Digitizing protocol."
+  {:added "1.0.0"
+   :tag Boolean}
+  [coll]
+  (satisfies? Digitizing coll))
+
