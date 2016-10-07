@@ -14,7 +14,9 @@
 
 ;; TODO:
 ;;
-;; - fix single number conv to seq (*spread-numbers*)
+;; somehow mark normalized sequence/vector/string that it is normalized (reify on head or custom lazy-seq with reify on each?)
+;; count digits also for seqs
+;; check error trowing off
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
@@ -23,6 +25,16 @@
        :dynamic true
        :tag Boolean}
   *digitization-throws*
+  "If set to true (default value) causes sanitizing functions to throw
+  exceptions instead of returning nil."
+  true)
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag Boolean}
+  *spread-numbers*
+  "If set to true causes conversion functions to split numbers that are
+  not single digits."
   true)
 
 (def ^{:added "1.0.0"
@@ -42,7 +54,7 @@
   *decimal-point-mode*
   "If set to true then allows decimal dot to appear in a sequence when
   processing in numeric mode."
-  false)
+  true)
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -58,6 +70,7 @@
     java.lang.Short
     java.lang.Integer
     java.lang.Long
+    java.lang.Double
     clojure.lang.BigInt
     java.math.BigInteger
     java.math.BigDecimal})
@@ -65,7 +78,7 @@
 (def ^{:added "1.0.0"
        :dynamic true
        :tag clojure.lang.IPersistentMap}
-  *chars-to-digits*
+  *vals-to-digits*
   (let [snum (map byte (range 0 10))
         nums (mapcat (partial repeat 2)  snum)
         strs (mapcat (juxt str identity) snum)
@@ -135,28 +148,76 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
 
-(defn pow
-  "Calculates x to the power of n."
+(defn- pow10
+  "Calculates 10 to the power of n."
   {:added "1.0.0"
    :tag clojure.lang.BigInt}
-  [x n]
+  [^Number n]
   (try
-    (.pow (BigInteger/valueOf x) n)
+    (.pow (BigInteger/valueOf 10) n)
     (catch Exception e
       (try
-        (.pow (BigInteger. (str x)) n)
+        (.pow (BigInteger/valueOf 10) (bigint n))
         (catch Exception e
-          (loop [r (bigint 1) n (bigint n)]
-            (if (zero? n) r (recur (*' x r) (dec n)))))))))
+          (loop [r (bigint 1)
+                 n (bigint n)]
+            (if (zero? n)
+              r
+              (recur (*' 10N r) (dec' n)))))))))
 
-(defn count-digits
-  "Counts digits for the given number. Returns the number of digits."
-  [^clojure.lang.BigInt n]
+(defn abs
+  "Returns absolute value of n."
+  {:added "1.0.0"
+   :tag Number}
+  [^Number n]
+  (if (< n 0) (-' n) n))
+
+(defn count-digits-dec
+  "Counts decimal digits of the given number.
+  Returns the number of digits."
+  [^BigDecimal n]
+  {:added "1.0.0"}
+  (if (zero? n)
+    0
+    (let [d (.scale (bigdec n))]
+      (if (> d Long/MAX_VALUE) d (long d)))))
+
+(defn count-digits-int
+  "Counts base digits of the given number. Returns the number of digits."
+  [^BigDecimal n]
   {:added "1.0.0"}
   (if (zero? n)
     1
-    (let [r (inc (bigint (Math/log10 (if (neg? n) (*' -1 n) n))))]
-      (if (> r Long/MAX_VALUE) r (long r)))))
+    (let [n (bigdec n)
+          t (.precision n)
+          i (-' t (.scale n))]
+      (if (> i Long/MAX_VALUE) i (long i)))))
+
+(defn count-digits-total
+  "Counts digits of the given number. Returns the number of digits."
+  [^BigDecimal n]
+  {:added "1.0.0"}
+  (if (zero? n)
+    1
+    (let [n (bigdec n)
+          t (.precision n)]
+      (if (> t Long/MAX_VALUE) t (long t)))))
+
+(defn count-digits
+  "Counts digits of the given number. Returns the total number of digits. If
+  *decimal-point-mode* is enabled then the result includes also the count of
+  decimal digits. If *decimal-point-mode* is disabled then the result
+  consist only of integer digits."
+  [^BigDecimal n]
+  {:added "1.0.0"}
+  (if (zero? n)
+    1
+    (let [n (bigdec n)
+          t (.precision n)]
+      (if *decimal-point-mode*
+        t
+        (let [i (-' t (.scale n))]
+          (if (> i Long/MAX_VALUE) i (long i)))))))
 
 (defn- dig-throw-arg
   "Throws argument exception when *digitization-throws* is not false nor nil."
@@ -219,7 +280,7 @@
   ([^String     s
     ^Number start
     ^Number   num]
-   (not-empty (subs-preserve s *sign-chars* start (+ start num)))))
+   (not-empty (subs-preserve s *sign-chars* start (+' start num)))))
 
 (defn- subseq-signed
   "Safely creates a sequence preserving its first character when it is a plus
@@ -234,7 +295,7 @@
   ([^clojure.lang.ISeq s
     ^Number     num-drop
     ^Number     num-take]
-   (not-empty (subseq-preserve s *sign-chars* num-drop (+ num-take num-drop)))))
+   (not-empty (subseq-preserve s *sign-chars* num-drop (+' num-take num-drop)))))
 
 (defn- subvec-signed
   "Safely creates a subvector preserving its first element when it is a plus
@@ -249,7 +310,7 @@
   ([^clojure.lang.IPersistentVector v
     ^Number start
     ^Number   num]
-   (not-empty (subvec-preserve v *sign-chars* start (+ start num)))))
+   (not-empty (subvec-preserve v *sign-chars* start (+' start num)))))
 
 (defn- fix-sign-seq
   "Removes plus character from the head of a sequential collection."
@@ -261,19 +322,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
-(defn- num->digits-core
+(defn num->digits-core
   "Changes a number given as n into a lazy sequence of numbers representing
   decimal digits (in reverse order for positive values). Returns a sequence of
   two elements: first is a number of digits and second is a sequence."
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
-  ([^Number n]
+  ([^BigDecimal n]
    (when n
      (if (zero? n)
        (lazy-seq (cons 0 nil))
-       (num->digits-core n (pow 10 (dec (count-digits n)))))))
-  ([^Number n
-    ^Number div-by]
+       (let [n (bigdec n)
+             digits-dec (count-digits-dec n)
+             digits-int (-' (count-digits-total n) digits-dec)
+             res-int    (num->digits-core (bigint n) (pow10 (if (<= digits-int 1) 0 (dec' digits-int))))]
+         (if (or (not *decimal-point-mode*) (zero? digits-dec))
+           res-int
+           (concat res-int
+                   (lazy-seq
+                    (cons \.
+                          (num->digits-core (bigint (.movePointRight (.remainder n 1M) digits-dec))
+                                            (pow10 (dec' digits-dec)))))))))))
+  ([^clojure.lang.BigInt n
+    ^clojure.lang.BigInt div-by]
    (if (zero? n)
      (if (> div-by 0)
        (lazy-seq
@@ -294,7 +365,7 @@
   ([^Number n]
    (lazy-seq
     (if (neg? n)
-      (cons \- (num->digits-core (*' -1 n)))
+      (cons \- (num->digits-core (-' n)))
       (if (zero? n)
         (cons 0 nil)
         (num->digits-core n))))))
@@ -304,7 +375,7 @@
        :private true
        :tag Long}
   big-seq-digits
-  (count (num->digits (Long/MAX_VALUE))))
+  (count-digits-int Long/MAX_VALUE))
 
 (def ^{:added "1.0.0"
        :const true
@@ -345,7 +416,7 @@
     (let [v (first x)]
       (if (= \. v)
         (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
-        (let [o (+ r (* v i))]
+        (let [o (+' r (* v i))]
           (if (> o Long/MAX_VALUE)
             (seq-big-dec->num (next x) (bigint o) (*' 10 i))
             (recur (next x) (long o) (*' 10 i))))))))
@@ -383,7 +454,7 @@
    ^clojure.lang.BigInt i]
   (if (nil? x)
     r
-    (let [o (+ r (* (first x) i))]
+    (let [o (+' r (* (first x) i))]
       (if (> o Long/MAX_VALUE)
         (seq-big->num (next x) (bigint o) (*' 10 i))
         (recur (next x) (long o) (*' 10 i))))))
@@ -411,7 +482,7 @@
   (let [is-minus? (contains? *minus-chars* (first coll))
         coll      (if is-minus? (next coll) coll)
         r         ((if *decimal-point-mode* seq-dec->num seq-long->num) coll)]
-    (if is-minus? (*' -1 r) r)))
+    (if is-minus? (-' r) r)))
 
 (defn- seq-digits->str
   {:added "1.0.0"
@@ -430,6 +501,7 @@
    ^clojure.lang.Fn f-first
    ^clojure.lang.Fn f-next]
   (if numeric-version
+    ;; produces numeric version of digitizing function
     (fn digitize-core-num
       [^clojure.lang.ISeq src
        ^Boolean had-number?
@@ -441,21 +513,27 @@
           (if (dfl-whitechar? e)
             (recur n had-number? had-point?)
             (lazy-seq
-             (if-let [c (*chars-to-digits* e)]
+             (if-let [c (*vals-to-digits* e)]
+               ;; adding another number
                (cons c (digitize-core-num n true had-point?))
                (if-let [c (*sign-to-char* e)]
+                 ;; adding positive or negative sign
                  (if-not had-number?
                    (cons c (digitize-core-num n true had-point?))
                    (dig-throw-arg "The sign of a number should occur once and precede first digit"))
-                 (if *decimal-point-mode*
-                   (if (contains? *decimal-point-chars* e)
-                     (if had-point?
-                       (dig-throw-arg "The decimal point character should occur just once")
-                       (cons \. (digitize-core-num n had-number? true)))
-                     (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
-                   (if (contains? *decimal-point-chars* e)
-                     (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e) 
-                     (dig-throw-arg "Sequence element is not a single digit nor a sign: " e))))))))))
+                 (if (and *spread-numbers* (digital-number? e) (not (<= 0 e 9)))
+                   ;; spreading numbers (if spread numbers is enabled)
+                   (digitize-core-num (concat (num->digits e) n) had-number? had-point?)
+                   (if *decimal-point-mode*
+                     ;; handling decimal point mode (if enabled)
+                     (if (contains? *decimal-point-chars* e)
+                       (if had-point?
+                         (dig-throw-arg "The decimal point character should occur just once")
+                         (cons \. (digitize-core-num n had-number? true)))
+                       (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
+                     (if (contains? *decimal-point-chars* e)
+                       (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e)
+                       (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))))
     (fn digitize-core
       [^clojure.lang.ISeq src
        ^clojure.lang.Fn sep-pred]
@@ -465,11 +543,16 @@
           (if (dfl-whitechar? e)
             (recur n sep-pred)
             (lazy-seq
-             (if-let [c (*chars-to-digits* e)]
+             (if-let [c (*vals-to-digits* e)]
+               ;; adding another number
                (cons c (digitize-core n))
                (if (sep-pred e)
+                 ;; adding separator
                  (cons e (digitize-core n))
-                 (dig-throw-arg "Sequence element is not a single digit nor a separator: " e))))))))))
+                 (if (and *spread-numbers* (digital-number? e) (not (<= 0 e 9)))
+                   ;; spreading numbers (if spread numbers is enabled)
+                   (digitize-core (concat (num->digits e) n) sep-pred)
+                   (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))))
 
 (defn- digitize-fn
   {:added "1.0.0"
@@ -486,7 +569,7 @@
        (let [r (digitize-generic src)]
          (if *numeric-mode*
            (subseq-signed r num-drop num-take)
-           (safe-subseq   r num-drop (+ num-take num-drop)))))
+           (safe-subseq   r num-drop (+' num-take num-drop)))))
       ([src
         ^Number num-take]
        (digitize-generic src 0 num-take))
@@ -527,8 +610,8 @@
    :tag Character}
   [^Character c]
   (when-not (nil? c)
-    (if (contains? *chars-to-digits* c)
-      (get *chars-to-digits* c)
+    (if (contains? *vals-to-digits* c)
+      (get *vals-to-digits* c)
       (dig-throw-arg "Given character does not express a digit: " c))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -554,9 +637,10 @@
 
   (digital?
    [coll]
-   "Checks if a given object is digital. Returns true if it is, false
-  otherwise. Digital means that the collection, string or a numeric type
-  object consist of numbers from 0 to 9 and optional + or - sign in front.")
+   "Checks if a given object or a lazy sequence is digital. Returns true if
+  it is, false otherwise. Digital means that the collection, string or a numeric
+  type object consist of numbers from 0 to 9 and optional + or - sign in front and
+  a decimal dot character (if decimal mode is enabled).")
 
   (digits->num
    [coll] [coll num-take] [coll num-drop num-take]
@@ -634,7 +718,7 @@
 
   (digitize
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-vec v))))
-  (digital?
+  (digital? ;; fixme: cache it for head/same object
       [^clojure.lang.IPersistentVector  v]                         (some? (digitize-vec v)))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-vec v))
