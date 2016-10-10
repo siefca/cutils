@@ -7,16 +7,14 @@
 
   (:require [cutils.core    :refer :all]
             [cutils.strings :refer :all]
-            [cutils.ranges  :refer :all]
-            [cutils.padding :refer :all]))
+            [cutils.ranges  :refer :all]))
 
 (cutils.core/init)
 
 ;; TODO:
 ;;
-;; somehow mark normalized sequence/vector/string that it is normalized (reify on head or custom lazy-seq with reify on each?)
-;; count digits also for seqs
-;; check error trowing off
+;; check error throwing off
+;; check slicing when decimal dot is present
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
@@ -161,63 +159,7 @@
         (catch Exception e
           (loop [r (bigint 1)
                  n (bigint n)]
-            (if (zero? n)
-              r
-              (recur (*' 10N r) (dec' n)))))))))
-
-(defn abs
-  "Returns absolute value of n."
-  {:added "1.0.0"
-   :tag Number}
-  [^Number n]
-  (if (< n 0) (-' n) n))
-
-(defn count-digits-dec
-  "Counts decimal digits of the given number.
-  Returns the number of digits."
-  [^BigDecimal n]
-  {:added "1.0.0"}
-  (if (zero? n)
-    0
-    (let [d (.scale (bigdec n))]
-      (if (> d Long/MAX_VALUE) d (long d)))))
-
-(defn count-digits-int
-  "Counts base digits of the given number. Returns the number of digits."
-  [^BigDecimal n]
-  {:added "1.0.0"}
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)
-          i (-' t (.scale n))]
-      (if (> i Long/MAX_VALUE) i (long i)))))
-
-(defn count-digits-total
-  "Counts digits of the given number. Returns the number of digits."
-  [^BigDecimal n]
-  {:added "1.0.0"}
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)]
-      (if (> t Long/MAX_VALUE) t (long t)))))
-
-(defn count-digits
-  "Counts digits of the given number. Returns the total number of digits. If
-  *decimal-point-mode* is enabled then the result includes also the count of
-  decimal digits. If *decimal-point-mode* is disabled then the result
-  consist only of integer digits."
-  [^BigDecimal n]
-  {:added "1.0.0"}
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)]
-      (if *decimal-point-mode*
-        t
-        (let [i (-' t (.scale n))]
-          (if (> i Long/MAX_VALUE) i (long i)))))))
+            (if (zero? n) r (recur (*' 10N r) (dec' n)))))))))
 
 (defn- dig-throw-arg
   "Throws argument exception when *digitization-throws* is not false nor nil."
@@ -234,6 +176,13 @@
    :tag java.lang.Boolean}
   [^Number n]
   (contains? *digital-numbers* (class n)))
+
+(defn digit?
+  "Returns true if the given number is a digital number."
+  {:added "1.0.0"
+   :tag java.lang.Boolean}
+  [^Number n]
+  (contains? *vals-to-digits* n))
 
 (def ^{:added "1.0.0"
        :tag Boolean
@@ -291,11 +240,13 @@
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
     ^Number     num-drop]
-   (not-empty (subseq-preserve s *sign-chars* num-drop)))
+   (not-empty
+    (subseq-preserve s *sign-chars* num-drop)))
   ([^clojure.lang.ISeq s
     ^Number     num-drop
     ^Number     num-take]
-   (not-empty (subseq-preserve s *sign-chars* num-drop (+' num-take num-drop)))))
+   (not-empty
+    (subseq-preserve s *sign-chars* num-drop (+' num-take num-drop)))))
 
 (defn- subvec-signed
   "Safely creates a subvector preserving its first element when it is a plus
@@ -320,6 +271,66 @@
   (if (= \+ (first coll)) (next coll) coll))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Counting
+
+(defn- count-digits-dec
+  "Counts decimal digits of the given number.
+  Returns the number of digits."
+  {:added "1.0.0"
+   :tag Number}
+  [^BigDecimal n]
+  (if (zero? n)
+    0
+    (let [d (.scale (bigdec n))]
+      (if (> d Long/MAX_VALUE) d (long d)))))
+
+(defn- count-digits-int
+  "Counts base digits of the given number. Returns the number of digits."
+  {:added "1.0.0"
+   :tag Number}
+  [^BigDecimal n]
+  (if (zero? n)
+    1
+    (let [n (bigdec n)
+          t (.precision n)
+          i (-' t (.scale n))]
+      (if (> i Long/MAX_VALUE) i (long i)))))
+
+(defn- count-digits-total
+  "Counts digits of the given number. Returns the number of digits."
+  {:added "1.0.0"
+   :tag Number}
+  [^BigDecimal n]
+  (if (zero? n)
+    1
+    (let [n (bigdec n)
+          t (.precision n)]
+      (if (> t Long/MAX_VALUE) t (long t)))))
+
+(defn- num-count-digits
+  "Counts digits of the given number. Returns the total number of digits. If
+  *decimal-point-mode* is enabled then the result includes also the count of
+  decimal digits. If *decimal-point-mode* is disabled then the result
+  is just the number of integer digits."
+  {:added "1.0.0"
+   :tag Number}
+  [^BigDecimal n]
+  (if (zero? n)
+    1
+    (let [n (bigdec n)
+          t (.precision n)]
+      (if *decimal-point-mode*
+        t
+        (let [i (-' t (.scale n))]
+          (if (> i Long/MAX_VALUE) i (long i)))))))
+
+(defn- seq-count-digits
+  {:added "1.0.0"
+   :tag Number}
+  [^clojure.lang.ISeq s]
+  (count (filter digit? s)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
 (defn num->digits-core
@@ -338,11 +349,11 @@
              res-int    (num->digits-core (bigint n) (pow10 (if (<= digits-int 1) 0 (dec' digits-int))))]
          (if (or (not *decimal-point-mode*) (zero? digits-dec))
            res-int
-           (concat res-int
-                   (lazy-seq
-                    (cons \.
-                          (num->digits-core (bigint (.movePointRight (.remainder n 1M) digits-dec))
-                                            (pow10 (dec' digits-dec)))))))))))
+           (concat
+            res-int
+            (cons \. (num->digits-core
+                      (bigint (.movePointRight (.remainder n 1M) digits-dec))
+                      (pow10 (dec' digits-dec))))))))))
   ([^clojure.lang.BigInt n
     ^clojure.lang.BigInt div-by]
    (if (zero? n)
@@ -494,6 +505,7 @@
 ;; Normalization and validation
 
 (defn- digitize-core-fn
+  "Produces a function that normalizes collection of digits."
   {:added "1.0.0"
    :tag clojure.lang.Fn}
   [^Boolean numeric-version
@@ -555,6 +567,9 @@
                    (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))))
 
 (defn- digitize-fn
+  "Produces a function that normalizes collection of digits by calling the
+  digitize-core-fn and optionally slices the resulting collection preserving
+  minus sign and optional separators."
   {:added "1.0.0"
    :tag clojure.lang.Fn}
   [^clojure.lang.Fn f-notempty
@@ -609,17 +624,17 @@
   {:added "1.0.0"
    :tag Character}
   [^Character c]
-  (when-not (nil? c)
-    (if (contains? *vals-to-digits* c)
-      (get *vals-to-digits* c)
-      (dig-throw-arg "Given character does not express a digit: " c))))
+  (when-some [x c]
+    (if (digit? x)
+      (get *vals-to-digits* x)
+      (dig-throw-arg "Given character does not express a digit: " x))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Digitizing protocol
 
 (defprotocol Digitizing
-  "States that collection is able to store digits that could be then used to
-  produce valid numeric values."
+  "States that a collection is able to store digits that could be then
+  used to produce valid numeric values."
 
   (digitize
    [coll]
@@ -683,10 +698,6 @@
   num-drop tells how many digits to drop before collecting number. The last
   one (num-drop) is applied before num-take when both are given.
 
-  If num-take is given and it is larger than the number of digits then it pads
-  the returned sequence with leading zeros to satisfy the number of elements
-  with a first element preserved (and not counted) if it's not a digit.
-
   Before slicing the collection is normalized (white characters are removed
   and digits are changed into numerical representation) and validated (if the
   collection contains other characters operation is stopped and nil is
@@ -704,6 +715,10 @@
    "Checks if first element of a sequence is a minus sign. Does not normalizes
   the given sequence. Returns true or false.")
 
+  (count-digits
+   [coll]
+   "Counts the number of digits in a digital collection.")
+
   (slice-digits
    [coll start] [coll start num-take]
    "Preserves first element of a series of digits when it is a plus
@@ -716,9 +731,11 @@
 
   clojure.lang.IPersistentVector
 
+  (count-digits
+      [^clojure.lang.IPersistentVector  v]                         (seq-count-digits (digitize-vec v)))
   (digitize
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-vec v))))
-  (digital? ;; fixme: cache it for head/same object
+  (digital?
       [^clojure.lang.IPersistentVector  v]                         (some? (digitize-vec v)))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-vec v))
@@ -740,6 +757,8 @@
 
   clojure.lang.ISeq
 
+  (count-digits
+      [^clojure.lang.ISeq s]                                       (seq-count-digits (digitize-seq s)))
   (digitize
       [^clojure.lang.ISeq s]                                       (not-empty (digitize-seq s)))
   (digital?
@@ -764,6 +783,8 @@
 
   java.lang.String
 
+  (count-digits
+      [^String  s]                                                 (seq-count-digits (digitize-seq s)))
   (digitize
       [^String  s]                                                 (not-empty (seq-digits->str (digitize-seq s))))
   (digital?
@@ -788,6 +809,8 @@
 
   clojure.lang.Symbol
 
+  (count-digits
+      [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize (str s))))
   (digitize
       [^clojure.lang.Symbol  s]                                    (digitize (str s)))
   (digital?
@@ -812,6 +835,8 @@
 
   clojure.lang.Keyword
 
+  (count-digits
+      [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize (str s))))
   (digitize
       [^clojure.lang.Keyword  s]                                   (digitize (str s)))
   (digital?
@@ -836,6 +861,8 @@
 
   java.lang.Character
 
+  (count-digits
+      [^Character  c]                                              (if (digit? (digitize-char c)) 1 0))
   (digitize
       [^Character  c]                                              (digitize-char c))
   (digital?
@@ -860,6 +887,8 @@
 
   java.lang.Number
 
+  (count-digits
+      [^Number  n]                                                 (num-count-digits (digitize-num n)))
   (digitize
       [^Number  n]                                                 (digitize-num n))
   (digital?
@@ -884,24 +913,28 @@
 
   nil
 
-  (digitize  [d] nil)
-  (digital?  [o] false)
-  (negative? [o] false)
+  (count-digits [o] 0)
+  (digitize     [o] nil)
+  (digital?     [o] false)
+  (negative?    [o] false)
   (digits->seq
-      ([d]     nil)
-    ([d nt]    nil)
-    ([d nd nt] nil))
+      ([o]     nil)
+    ([o nt]    nil)
+    ([o nd nt] nil))
   (digits->num
-      ([d]     nil)
-    ([d nt]    nil)
-    ([d nd nt] nil))
+      ([o]     nil)
+    ([o nt]    nil)
+    ([o nd nt] nil))
   (digits->str
-      ([d]     nil)
-    ([d nt]    nil)
-    ([d nd nt] nil))
+      ([o]     nil)
+    ([o nt]    nil)
+    ([o nd nt] nil))
   (slice-digits
-      ([d st]  nil)
-    ([d st nt] nil)))
+      ([o st]  nil)
+    ([o st nt] nil)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Marking and checking
 
 (defn digitizing?
   "Returns true if coll satisfies the Digitizing protocol."
@@ -909,4 +942,3 @@
    :tag Boolean}
   [coll]
   (satisfies? Digitizing coll))
-
