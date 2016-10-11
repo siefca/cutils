@@ -11,21 +11,8 @@
 
 (cutils.core/init)
 
-;; TODO:
-;;
-;; check error throwing off
-;; check slicing when decimal dot is present
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Defaults
-
-(def ^{:added "1.0.0"
-       :dynamic true
-       :tag Boolean}
-  *digitization-throws*
-  "If set to true (default value) causes sanitizing functions to throw
-  exceptions instead of returning nil."
-  true)
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -78,8 +65,9 @@
        :tag clojure.lang.IPersistentMap}
   *vals-to-digits*
   (let [snum (map byte (range 0 10))
-        nums (mapcat (partial repeat 2)  snum)
-        strs (mapcat (juxt str identity) snum)
+        nums (mapcat (partial repeat 2)     snum)
+        bigs (mapcat (juxt bigdec identity) snum)
+        strs (mapcat (juxt str    identity) snum)
         syms (mapcat (juxt (comp symbol  str) identity) snum)
         kwds (mapcat (juxt (comp keyword str) identity) snum)
         chrc (mapcat (juxt (comp first   str) identity) snum)]
@@ -146,6 +134,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
 
+(defn dot?
+  "True if the given argument is a dot character."
+  {:added "1.0.0"
+   :tag Boolean}
+  [^Character c]
+  (= \. c))
+
 (defn- pow10
   "Calculates 10 to the power of n."
   {:added "1.0.0"
@@ -162,12 +157,11 @@
             (if (zero? n) r (recur (*' 10N r) (dec' n)))))))))
 
 (defn- dig-throw-arg
-  "Throws argument exception when *digitization-throws* is not false nor nil."
+  "Throws argument exception."
   {:added "1.0.0"
    :tag nil}
   [& more]
-  (when *digitization-throws*
-    (apply throw-arg more)))
+  (apply throw-arg more))
 
 (defn digital-number?
   "Returns true if the given number n can be used to express a collection of
@@ -223,12 +217,12 @@
   unless that substring is empty."
   {:added "1.0.0"
    :tag String}
-  ([^String     s
+  ([^String s
     ^Number start]
    (not-empty (subs-preserve s *sign-chars* start)))
-  ([^String     s
+  ([^String s
     ^Number start
-    ^Number   num]
+    ^Number num]
    (not-empty (subs-preserve s *sign-chars* start (+' start num)))))
 
 (defn- subseq-signed
@@ -239,12 +233,12 @@
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
-    ^Number     num-drop]
+    ^Number num-drop]
    (not-empty
     (subseq-preserve s *sign-chars* num-drop)))
   ([^clojure.lang.ISeq s
-    ^Number     num-drop
-    ^Number     num-take]
+    ^Number num-drop
+    ^Number num-take]
    (not-empty
     (subseq-preserve s *sign-chars* num-drop (+' num-take num-drop)))))
 
@@ -268,7 +262,7 @@
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^clojure.lang.ISeq coll]
-  (if (= \+ (first coll)) (next coll) coll))
+  (lazy-seq (if (= \+ (first coll)) (next coll) coll)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Counting
@@ -279,33 +273,30 @@
   {:added "1.0.0"
    :tag Number}
   [^BigDecimal n]
-  (if (zero? n)
-    0
-    (let [d (.scale (bigdec n))]
-      (if (> d Long/MAX_VALUE) d (long d)))))
+  (if (zero? n) 0
+      (let [d (.scale (bigdec n))]
+        (if (> d Long/MAX_VALUE) d (long d)))))
 
 (defn- count-digits-int
   "Counts base digits of the given number. Returns the number of digits."
   {:added "1.0.0"
    :tag Number}
   [^BigDecimal n]
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)
-          i (-' t (.scale n))]
-      (if (> i Long/MAX_VALUE) i (long i)))))
+  (if (zero? n) 1
+      (let [n (bigdec n)
+            t (.precision n)
+            i (-' t (.scale n))]
+        (if (> i Long/MAX_VALUE) i (long i)))))
 
 (defn- count-digits-total
   "Counts digits of the given number. Returns the number of digits."
   {:added "1.0.0"
    :tag Number}
   [^BigDecimal n]
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)]
-      (if (> t Long/MAX_VALUE) t (long t)))))
+  (if (zero? n) 1
+      (let [n (bigdec n)
+            t (.precision n)]
+        (if (> t Long/MAX_VALUE) t (long t)))))
 
 (defn- num-count-digits
   "Counts digits of the given number. Returns the total number of digits. If
@@ -315,14 +306,12 @@
   {:added "1.0.0"
    :tag Number}
   [^BigDecimal n]
-  (if (zero? n)
-    1
-    (let [n (bigdec n)
-          t (.precision n)]
-      (if *decimal-point-mode*
-        t
-        (let [i (-' t (.scale n))]
-          (if (> i Long/MAX_VALUE) i (long i)))))))
+  (if (zero? n) 1
+      (let [n (bigdec n)
+            t (.precision n)]
+        (if *decimal-point-mode* t
+            (let [i (-' t (.scale n))]
+              (if (> i Long/MAX_VALUE) i (long i)))))))
 
 (defn- seq-count-digits
   {:added "1.0.0"
@@ -346,27 +335,28 @@
        (let [n (bigdec n)
              digits-dec (count-digits-dec n)
              digits-int (-' (count-digits-total n) digits-dec)
-             res-int    (num->digits-core (bigint n) (pow10 (if (<= digits-int 1) 0 (dec' digits-int))))]
+             res-int    (num->digits-core
+                         (bigint n)
+                         (pow10 (if (<= digits-int 1) 0 (dec' digits-int))))]
          (if (or (not *decimal-point-mode*) (zero? digits-dec))
            res-int
            (concat
             res-int
-            (cons \. (num->digits-core
-                      (bigint (.movePointRight (.remainder n 1M) digits-dec))
-                      (pow10 (dec' digits-dec))))))))))
+            (cons \.
+                  (num->digits-core
+                   (bigint (.movePointRight (.remainder n 1M) digits-dec))
+                   (pow10 (dec' digits-dec))))))))))
   ([^clojure.lang.BigInt n
     ^clojure.lang.BigInt div-by]
    (if (zero? n)
      (if (> div-by 0)
        (lazy-seq
-        (cons
-         (byte 0)
-         (num->digits-core 0 (quot div-by 10))))
+        (cons (byte 0)
+              (num->digits-core 0 (quot div-by 10))))
        nil)
      (lazy-seq
-      (cons
-       (byte (quot n div-by))
-       (num->digits-core (mod n div-by) (quot div-by 10)))))))
+      (cons (byte (quot n div-by))
+            (num->digits-core (mod n div-by) (quot div-by 10)))))))
 
 (defn- num->digits
   "Changes a number given as n into a sequence of numbers representing decimal
@@ -401,7 +391,8 @@
   [^clojure.lang.ISeq x
    ^BigDecimal r
    ^clojure.lang.BigInt i]
-  (if (nil? x) r (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))
+  (if (nil? x) r
+      (recur (next x) (+' r (*' (first x) i)) (*' 10 i))))
 
 (defn- seq-big-dec->num
   {:added "1.0.0"
@@ -409,12 +400,11 @@
   [^clojure.lang.ISeq x
    ^clojure.lang.BigInt r
    ^clojure.lang.BigInt i]
-  (if (nil? x)
-    r
-    (let [v (first x)]
-      (if (= \. v)
-        (seq-big-dec->num (next x) (/ r i) (bigint 1))
-        (recur (next x) (+' r (*' v i)) (*' 10 i))))))
+  (if (nil? x) r
+      (let [v (first x)]
+        (if (dot? v)
+          (seq-big-dec->num (next x) (/ r i) (bigint 1))
+          (recur (next x) (+' r (*' v i)) (*' 10 i))))))
 
 (defn- seq-dec->num2
   {:added "1.0.0"
@@ -422,15 +412,14 @@
   [^clojure.lang.ISeq x
    ^long r
    ^clojure.lang.BigInt i]
-  (if (nil? x)
-    r
-    (let [v (first x)]
-      (if (= \. v)
-        (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
-        (let [o (+' r (* v i))]
-          (if (> o Long/MAX_VALUE)
-            (seq-big-dec->num (next x) (bigint o) (*' 10 i))
-            (recur (next x) (long o) (*' 10 i))))))))
+  (if (nil? x) r
+      (let [v (first x)]
+        (if (dot? v)
+          (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
+          (let [o (+' r (* v i))]
+            (if (> o Long/MAX_VALUE)
+              (seq-big-dec->num (next x) (bigint o) (*' 10 i))
+              (recur (next x) (long o) (*' 10 i))))))))
 
 (defn- seq-dec->num
   "Warning: nil or false element ends iteration but that shouldn't be a
@@ -440,14 +429,13 @@
   [^clojure.lang.ISeq d]
   (when-not (empty? d)
     (loop [x (reverse d) r (long 0) i (long 1)]
-      (if (nil? x)
-        r
-        (let [v (first x)]
-          (if (= \. v)
-            (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
-            (if (>= i long-before)
-              (seq-dec->num2 x r (bigint i))
-              (recur (next x) (+ r (* ^long v i)) (* 10 i)))))))))
+      (if (nil? x) r
+          (let [v (first x)]
+            (if (dot? v)
+              (seq-big-dec->num (next x) (bigdec (/ r i)) (bigint 1))
+              (if (>= i long-before)
+                (seq-dec->num2 x r (bigint i))
+                (recur (next x) (+ r (* ^long v i)) (* 10 i)))))))))
 
 (defn- seq-big->num
   {:added "1.0.0"
@@ -578,15 +566,12 @@
   (let [dcore     (digitize-core-fn false f-notempty f-first f-next)
         dcore-num (digitize-core-fn true  f-notempty f-first f-next)]
     (fn digitize-generic
-      ([src
-        ^Number num-drop
-        ^Number num-take]
+      ([src, ^Number num-drop, ^Number num-take]
        (let [r (digitize-generic src)]
          (if *numeric-mode*
            (subseq-signed r num-drop num-take)
            (safe-subseq   r num-drop (+' num-take num-drop)))))
-      ([src
-        ^Number num-take]
+      ([src, ^Number num-take]
        (digitize-generic src 0 num-take))
       ([src]
        (if *numeric-mode*
@@ -628,6 +613,46 @@
     (if (digit? x)
       (get *vals-to-digits* x)
       (dig-throw-arg "Given character does not express a digit: " x))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Decimal dot fixing
+
+(defn- fix-dot-seq-last
+  [^clojure.lang.ISeq coll]
+  (lazy-seq
+   (when coll
+     (if-some [n (next coll)]
+       (cons (first coll) (fix-dot-seq-last n))
+       (if (empty? coll) coll
+           (let [f (first coll)]
+             (when-not (dot? f)
+               (cons f nil))))))))
+
+(defn- fix-dot-seq
+  [^clojure.lang.ISeq coll]
+  (fix-dot-seq-last
+   (lazy-seq
+    (if (dot? (first coll))
+      (rest coll)
+      coll))))
+
+(defn- fix-dot-vec
+  [^clojure.lang.IPersistentVector v]
+  (when v
+    (if-not (contains? v 0) v
+            (let [c (dec (count v))
+                  left  (if (dot? (get v 0)) 1 0)
+                  right (if (zero? c) 1 (if (dot? (get v c)) c (inc c)))]
+              (subvec v left right)))))
+
+(defn- fix-dot-str
+  [^String s]
+  (when s
+    (if (empty? s) s
+        (let [c (dec (count s))
+              left  (if (dot? (get s 0)) 1 0)
+              right (if (zero? c) 1 (if (dot? (get s c)) c (inc c)))]
+          (subs s left right)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Digitizing protocol
@@ -942,3 +967,4 @@
    :tag Boolean}
   [coll]
   (satisfies? Digitizing coll))
+
