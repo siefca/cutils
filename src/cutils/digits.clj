@@ -322,10 +322,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Conversions
 
-(defn num->digits-core
+(defn- num->digits-core
   "Changes a number given as n into a lazy sequence of numbers representing
-  decimal digits (in reverse order for positive values). Returns a sequence of
-  two elements: first is a number of digits and second is a sequence."
+  decimal digits. Returns a sequence of two elements: first is a number of
+  digits and second is a sequence."
   {:added "1.0.0"
    :tag clojure.lang.LazySeq}
   ([^BigDecimal n]
@@ -501,6 +501,7 @@
    ^clojure.lang.Fn f-first
    ^clojure.lang.Fn f-next]
   (if numeric-version
+
     ;; produces numeric version of digitizing function
     (fn digitize-core-num
       [^clojure.lang.ISeq src
@@ -514,17 +515,21 @@
             (recur n had-number? had-point?)
             (lazy-seq
              (if-let [c (*vals-to-digits* e)]
+
                ;; adding another number
                (cons c (digitize-core-num n true had-point?))
                (if-let [c (*sign-to-char* e)]
+
                  ;; adding positive or negative sign
                  (if-not had-number?
                    (cons c (digitize-core-num n true had-point?))
                    (dig-throw-arg "The sign of a number should occur once and precede first digit"))
                  (if (and *spread-numbers* (digital-number? e) (not (<= 0 e 9)))
+
                    ;; spreading numbers (if spread numbers is enabled)
                    (digitize-core-num (concat (num->digits e) n) had-number? had-point?)
                    (if *decimal-point-mode*
+
                      ;; handling decimal point mode (if enabled)
                      (if (contains? *decimal-point-chars* e)
                        (if had-point?
@@ -534,6 +539,8 @@
                      (if (contains? *decimal-point-chars* e)
                        (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e)
                        (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))))
+
+    ;; produces generic version of digitizing function
     (fn digitize-core
       [^clojure.lang.ISeq src
        ^clojure.lang.Fn sep-pred]
@@ -544,12 +551,15 @@
             (recur n sep-pred)
             (lazy-seq
              (if-let [c (*vals-to-digits* e)]
+
                ;; adding another number
                (cons c (digitize-core n))
                (if (sep-pred e)
+
                  ;; adding separator
                  (cons e (digitize-core n))
                  (if (and *spread-numbers* (digital-number? e) (not (<= 0 e 9)))
+
                    ;; spreading numbers (if spread numbers is enabled)
                    (digitize-core (concat (num->digits e) n) sep-pred)
                    (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))))
@@ -633,26 +643,34 @@
   (fix-dot-seq-last
    (lazy-seq
     (if (dot? (first coll))
-      (rest coll)
+      (if (nil? (next coll))
+        (rest coll)
+        (cons (byte 0) coll))
       coll))))
 
 (defn- fix-dot-vec
   [^clojure.lang.IPersistentVector v]
   (when v
     (if-not (contains? v 0) v
-            (let [c (dec (count v))
-                  left  (if (dot? (get v 0)) 1 0)
-                  right (if (zero? c) 1 (if (dot? (get v c)) c (inc c)))]
-              (subvec v left right)))))
+            (let [c (dec (count v))]
+              (if (zero? c)
+                (if (dot? (get v 0)) (empty v) v)
+                (let [v (if (dot? (get v c)) (subvec v 0 c) v)]
+                  (if (dot? (get v 0))
+                    (into [(byte 0)] v)
+                    v)))))))
 
 (defn- fix-dot-str
   [^String s]
   (when s
     (if (empty? s) s
-        (let [c (dec (count s))
-              left  (if (dot? (get s 0)) 1 0)
-              right (if (zero? c) 1 (if (dot? (get s c)) c (inc c)))]
-          (subs s left right)))))
+        (let [c (dec (count s))]
+          (if (zero? c)
+            (if (dot? (get s 0)) (empty s) s)
+            (let [s (if (dot? (get s c)) (subs s 0 c) s)]
+              (if (dot? (get s 0))
+                (str (byte 0) s)
+                s)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Digitizing protocol
@@ -735,6 +753,10 @@
   The function returns a sequence or nil if something went wrong (e.g. empty
   collection was given or ranges were mismatched).")
 
+  (digits-fix-dot
+   [coll]
+   "Removes last dot from digital collection and puts 0 in front of first dot.")
+
   (negative?
    [coll]
    "Checks if first element of a sequence is a minus sign. Does not normalizes
@@ -774,6 +796,8 @@
       ([^clojure.lang.IPersistentVector v]                         (seq-digits->str (digits->seq v)))
     ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->str (digits->seq v nt)))
     ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->str (digits->seq v nd nt))))
+  (digits-fix-dot
+      [^clojure.lang.IPersistentVector  v]                         (not-empty (fix-dot-vec v)))
   (slice-digits
       ([^clojure.lang.IPersistentVector v, ^Number st]             (subvec-signed v st))
     ([^clojure.lang.IPersistentVector   v, ^Number st, ^Number nt] (subvec-signed v st nt)))
@@ -800,6 +824,8 @@
       ([^clojure.lang.ISeq s]                                      (seq-digits->str (digits->seq s)))
     ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digits->seq s nt)))
     ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digits->seq s nd nt))))
+  (digits-fix-dot
+      [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
   (slice-digits
       ([^clojure.lang.ISeq s, ^Number st]                          (subseq-signed s st))
     ([^clojure.lang.ISeq   s, ^Number st, ^Number nt]              (subseq-signed s st nt)))
@@ -826,6 +852,8 @@
       ([^String s]                                                 (seq-digits->num (digits->seq s)))
     ([^String   s, ^Number nt]                                     (seq-digits->num (digits->seq s nt)))
     ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->num (digits->seq s nd nt))))
+  (digits-fix-dot
+      [^String  s]                                                 (not-empty (fix-dot-str s)))
   (slice-digits
       ([^String s, ^Number st]                                     (subs-signed s st))
     ([^String   s, ^Number st, ^Number nt]                         (subs-signed s st nt)))
@@ -837,7 +865,7 @@
   (count-digits
       [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize (str s))))
   (digitize
-      [^clojure.lang.Symbol  s]                                    (digitize (str s)))
+      [^clojure.lang.Symbol  s]                                    (when-let [x (digitize (str s))] (symbol x)))
   (digital?
       [^clojure.lang.Symbol  s]                                    (digital? (str s)))
   (digits->seq
@@ -852,9 +880,11 @@
       ([^clojure.lang.Symbol s]                                    (digits->num (str s)))
     ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->num (str s) nt))
     ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->num (str s) nd nt)))
+  (digits-fix-dot
+      [^clojure.lang.Symbol  s]                                    (when-let [x (fix-dot-str (str s))] (symbol x)))
   (slice-digits
-      ([^clojure.lang.Symbol s, ^Number st]                        (slice-digits (str s) st))
-    ([^clojure.lang.Symbol   s, ^Number st, ^Number nt]            (slice-digits (str s) st nt)))
+      ([^clojure.lang.Symbol s, ^Number st]                        (symbol (slice-digits (str s) st)))
+    ([^clojure.lang.Symbol   s, ^Number st, ^Number nt]            (symbol (slice-digits (str s) st nt))))
   (negative?
       [^clojure.lang.Symbol  s]                                    (negative? (str s)))
 
@@ -863,7 +893,7 @@
   (count-digits
       [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize (str s))))
   (digitize
-      [^clojure.lang.Keyword  s]                                   (digitize (str s)))
+      [^clojure.lang.Keyword  s]                                   (when-let [x (digitize (str s))] (keyword x)))
   (digital?
       [^clojure.lang.Keyword  s]                                   (digital? (str s)))
   (digits->seq
@@ -878,6 +908,8 @@
       ([^clojure.lang.Keyword s]                                   (digits->num (str s)))
     ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->num (str s) nt))
     ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->num (str s) nd nt)))
+  (digits-fix-dot
+      [^clojure.lang.Keyword  s]                                   (when-let [x (fix-dot-str (str s))] (keyword x)))
   (slice-digits
       ([^clojure.lang.Keyword s, ^Number st]                       (slice-digits (str s) st))
     ([^clojure.lang.Keyword   s, ^Number st, ^Number nt]           (slice-digits (str s) st nt)))
@@ -904,6 +936,8 @@
       ([^Character c]                                              (some-> (digitize-char c) int))
     ([^Character   c, ^Number nt]                                  (some-> (digits->str c nt) Integer/parseInt))
     ([^Character   c, ^Number nd, ^Number nt]                      (some-> (digits->str c nd nt) Integer/parseInt)))
+  (digits-fix-dot
+      [^Character  c]                                              (when-not (dot? c) c))
   (slice-digits
       ([^Character c, ^Number st]                                  (subs-signed (str (digitize-char c)) st))
     ([^Character   c, ^Number st, ^Number nt]                      (subs-signed (str (digitize-char c)) st nt)))
@@ -930,6 +964,8 @@
       ([^Number n]                                                 (digitize (str n)))
     ([^Number n, ^Number nt]                                       (subs-signed (digitize (str n)) nt))
     ([^Number n, ^Number nd, ^Number nt]                           (subs-signed (digitize (str n)) nd nt)))
+  (digits-fix-dot
+      [^Number n]                                                  n)
   (slice-digits
       ([^Number n, ^Number st]                                     (digits->num (subseq-signed (digits->seq n) st)))
     ([^Number   n, ^Number st, ^Number nt]                         (digits->num (subseq-signed (digits->seq n) st nt))))
@@ -938,10 +974,11 @@
 
   nil
 
-  (count-digits [o] 0)
-  (digitize     [o] nil)
-  (digital?     [o] false)
-  (negative?    [o] false)
+  (count-digits   [o]     0)
+  (digitize       [o]   nil)
+  (digital?       [o] false)
+  (negative?      [o] false)
+  (digits-fix-dot [o]   nil)
   (digits->seq
       ([o]     nil)
     ([o nt]    nil)
