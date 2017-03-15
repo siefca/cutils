@@ -43,9 +43,19 @@
 
 (def ^{:added "1.0.0"
        :dynamic true
+       :tag java.lang.Character}
+  *dot-char*
+  \.)
+
+(def ^{:added "1.0.0"
+       :dynamic true
        :tag clojure.lang.IPersistentSet}
   *decimal-point-chars*
-  #{'. \. :. \, ', (keyword \,)})
+  (let [ds (str *dot-char*)]
+    (conj #{'. \. :. \, ', (keyword \,)}
+          *dot-char*
+          (symbol  ds)
+          (keyword ds))))
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -83,7 +93,7 @@
 (def ^{:added "1.0.0"
        :dynamic true
        :tag clojure.lang.IPersistentSet}
-  *minus-chars*
+  *minus-signs*
   "Minus signs."
   #{- :- '- "-" \-})
 
@@ -98,7 +108,7 @@
 (def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentSet
        :dynamic true}
-  *sign-chars*
+  *signs*
   "Set of plus and minus signs."
   (set (keys *sign-to-char*)))
 
@@ -139,7 +149,14 @@
   {:added "1.0.0"
    :tag Boolean}
   [^Character c]
-  (= \. c))
+  (= *dot-char* c))
+
+(defn decimal-point-char?
+  "True if the given argument is decimal point character."
+  {:added "1.0.0"
+   :tag Boolean}
+  [^Character c]
+  (contains? *decimal-point-chars* c))
 
 (defn- pow10
   "Calculates 10 to the power of n."
@@ -172,7 +189,7 @@
   (contains? *digital-numbers* (class n)))
 
 (defn digit?
-  "Returns true if the given number is a digital number."
+  "Returns true if the given object is a digit."
   {:added "1.0.0"
    :tag java.lang.Boolean}
   [^Number n]
@@ -219,11 +236,13 @@
    :tag String}
   ([^String s
     ^Number start]
-   (not-empty (subs-preserve s *sign-chars* start)))
+   (not-empty
+    (subs-preserve s *signs* start)))
   ([^String s
     ^Number start
     ^Number num]
-   (not-empty (subs-preserve s *sign-chars* start (+' start num)))))
+   (not-empty
+    (subs-preserve s *signs* start (+' start num)))))
 
 (defn- subseq-signed
   "Safely creates a subsequence preserving its first character when it is
@@ -235,12 +254,12 @@
   ([^clojure.lang.ISeq s
     ^Number num-drop]
    (not-empty
-    (subseq-preserve s *sign-chars* num-drop)))
+    (subseq-preserve s *signs* num-drop)))
   ([^clojure.lang.ISeq s
     ^Number num-drop
     ^Number num-take]
    (not-empty
-    (subseq-preserve s *sign-chars* num-drop (+' num-take num-drop)))))
+    (subseq-preserve s *signs* num-drop (+' num-take num-drop)))))
 
 (defn- subvec-signed
   "Safely creates a subvector preserving its first element when it is a plus
@@ -250,19 +269,22 @@
   {:added "1.0.0"
    :tag clojure.lang.IPersistentVector}
   ([^clojure.lang.IPersistentVector v
-    ^Number start]
-   (not-empty (subvec-preserve v *sign-chars* start)))
+    ^Number                     start]
+   (not-empty
+    (subvec-preserve v *signs* start)))
   ([^clojure.lang.IPersistentVector v
-    ^Number start
-    ^Number   num]
-   (not-empty (subvec-preserve v *sign-chars* start (+' start num)))))
+    ^Number                     start
+    ^Number                       num]
+   (not-empty
+    (subvec-preserve v *signs* start (+' start num)))))
 
 (defn- fix-sign-seq
   "Removes plus character from the head of a sequential collection."
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^clojure.lang.ISeq coll]
-  (lazy-seq (if (= \+ (first coll)) (next coll) coll)))
+  (lazy-seq
+   (if (= \+ (first coll)) (next coll) coll)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Counting
@@ -342,7 +364,7 @@
            res-int
            (concat
             res-int
-            (cons \.
+            (cons *dot-char*
                   (num->digits-core
                    (bigint (.movePointRight (.remainder n 1M) digits-dec))
                    (pow10 (dec' digits-dec))))))))))
@@ -506,7 +528,7 @@
   {:added "1.0.0"
    :tag Number}
   [^clojure.lang.ISeq coll]
-  (let [is-minus? (contains? *minus-chars* (first coll))
+  (let [is-minus? (contains? *minus-signs* (first coll))
         coll      (if is-minus? (next coll) coll)
         r         ((if *decimal-point-mode* seq-dec->num seq-long->num) coll)]
     (if is-minus? (-' r) r)))
@@ -548,13 +570,13 @@
 
                ;; handling decimal point mode (if enabled)
                (if *decimal-point-mode*
-                 (if (contains? *decimal-point-chars* e)
+                 (if (decimal-point-char? e)
                    (if had-point?
                      (dig-throw-arg "The decimal point character should occur just once")
-                     (cons \. (digitize-core-num n had-number? true)))
+                     (cons *dot-char* (digitize-core-num n had-number? true)))
                    (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
 
-                 (if (contains? *decimal-point-chars* e)
+                 (if (decimal-point-char? e)
                    (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e)
                    (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))))
 
@@ -582,7 +604,6 @@
              ;; spreading numbers (if enabled)
              (if (and *spread-numbers* (digital-number? e))
                (digitize-core-gen (concat (num->digits e) n) sep-pred)
-
                (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))
 
 (defn- digitize-seq
@@ -591,14 +612,14 @@
   preserving minus sign and optional separators."
   {:added "1.0.0"
    :tag clojure.lang.Fn}
-  ([^clojure.lang.ISeq src,
-    ^Number       num-drop,
+  ([^clojure.lang.ISeq src
+    ^Number       num-drop
     ^Number       num-take]
    (let [r (digitize-seq src)]
      (if *numeric-mode*
        (subseq-signed r num-drop num-take)
        (safe-subseq   r num-drop (+' num-take num-drop)))))
-  ([^clojure.lang.ISeq src,
+  ([^clojure.lang.ISeq src
     ^Number       num-take]
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
@@ -830,7 +851,7 @@
   (digits-fix-dot
       [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
   (negative?
-      [^clojure.lang.ISeq  s]                                      (contains? *minus-chars* (first s)))
+      [^clojure.lang.ISeq  s]                                      (contains? *minus-signs* (first s)))
 
   java.lang.String
 
