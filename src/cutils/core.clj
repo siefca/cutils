@@ -19,3 +19,16 @@
    :tag nil}
   [& msgs]
   (throw (IllegalArgumentException. ^String (apply str msgs))))
+
+(defmacro try-val
+  {:added "1.0.0"}
+  [val exclass & body]
+  `(try (do ~@body) (catch ~exclass e# ~val)))
+
+(defmacro try-arg
+  [val & body]
+  `(try-val ~val IllegalArgumentException ~@body))
+
+(defmacro try-arg-false
+  [& body]
+  `(try-arg false ~@body))

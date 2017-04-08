@@ -31,7 +31,7 @@
   allowed. If numeric mode is disabled then separators are allowed but you may
   get strange results when converting to numbers (all separators and white
   characters are omitted)."
-  true)
+  false)
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -52,8 +52,15 @@
        :tag clojure.lang.IPersistentSet}
   *decimal-point-chars*
   (let [ds (str *dot-char*)]
-    (conj #{'. \. :. \, ', (keyword \,)}
-          *dot-char*
+    (conj #{'. \. :. \, ', (keyword \,) \· \· \՝ \։ \، \؍
+            \٫
+            \٬
+            \۔
+            \܂
+            \࠰
+            \࡞
+            \። \᙮ \᛫ \᠃ \᠉ \⳹ \⳾ \᠂ \᠈ \߸ \፣ \․ }
+          ds
           (symbol  ds)
           (keyword ds))))
 
@@ -75,13 +82,13 @@
        :tag clojure.lang.IPersistentMap}
   *vals-to-digits*
   (let [snum (map byte (range 0 10))
-        nums (mapcat (partial repeat 2)     snum)
-        bigs (mapcat (juxt bigdec identity) snum)
-        strs (mapcat (juxt str    identity) snum)
-        syms (mapcat (juxt (comp symbol  str) identity) snum)
-        kwds (mapcat (juxt (comp keyword str) identity) snum)
-        chrc (mapcat (juxt (comp first   str) identity) snum)]
-    (apply hash-map (concat nums strs syms kwds chrc))))
+        nums (mapcat (partial repeat 2)     snum)               ;; bytes 0-9
+        bigs (mapcat (juxt bigdec identity) snum)               ;; big decimals 0-9
+        strs (mapcat (juxt str    identity) snum)               ;; strings "0"-"9"
+        syms (mapcat (juxt (comp symbol  str) identity) snum)   ;; symbols '0-'9
+        kwds (mapcat (juxt (comp keyword str) identity) snum)   ;; keywords :0-:9
+        chrc (mapcat (juxt (comp first   str) identity) snum)]  ;; characters \0-\9
+    (apply hash-map (concat nums strs syms kwds chrc))))        ;; mapping all of the above to bytes
 
 (def ^{:added "1.0.0"
        :const true
@@ -113,11 +120,18 @@
   (set (keys *sign-to-char*)))
 
 (def ^{:added "1.0.0"
+       :tag clojure.lang.IPersistentMap
+       :dynamic true}
+  *separators-translate*
+  "Separators translation map used when numeric mode is disabled."
+  {- \-, + \+})
+
+(def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentSet
        :dynamic true}
   *separator-chars*
   "Separator characters."
-  nil)
+  *signs*)
 
 (def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentSet
@@ -140,6 +154,36 @@
     Character/LINE_SEPARATOR
     Character/PARAGRAPH_SEPARATOR
     Character/MATH_SYMBOL})
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Switches
+
+(defmacro with-numeric-mode!
+  "Enables numeric mode processing for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*numeric-mode* true] ~@body))
+
+(defmacro with-generic-mode!
+  "Disables numeric mode processing for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*numeric-mode* false] ~@body))
+
+(defmacro with-decimal-point-mode!
+  "Enables numeric mode processing and decimal-point detection
+  for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*numeric-mode*       true
+             cutils.digits/*decimal-point-mode* true] ~@body))
+
+(defmacro with-spread-numbers!
+  "Enables numbers spreading when processing digital sequences
+  for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*spread-numbers* true] ~@body))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
@@ -225,7 +269,21 @@
   {:added "1.0.0"
    :tag clojure.lang.Fn}
   []
-  (if (empty? *separator-chars*) separator-class? separator-chars?))
+  (if (empty? *separator-chars*)
+    separator-class?
+    (fn [o]
+      (or
+       (separator-class? o)
+       (separator-chars? o)))))
+
+(defn- dfl-translator
+  "Returns a function that translates certain separator objects."
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
+  []
+  (if-let [t (not-empty *separators-translate*)]
+    (fn [o] (get *separators-translate* o o))
+    identity))
 
 (defn- subs-signed
   "Safely creates a substring preserving its first character when it is a plus
@@ -285,6 +343,14 @@
   [^clojure.lang.ISeq coll]
   (lazy-seq
    (if (= \+ (first coll)) (next coll) coll)))
+
+(defn- seq-negative?
+  "Returns true if the digital sequence is valid and
+  expresses a negative number."
+  {:added "1.0.0"
+   :tag Boolean}
+  [^clojure.lang.ISeq coll]
+  (contains? *minus-signs* (first coll)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Counting
@@ -582,28 +648,29 @@
 
 (defn- digitize-core-gen
   [^clojure.lang.ISeq src
-   ^clojure.lang.Fn sep-pred]
+   ^clojure.lang.Fn sep-pred
+   ^clojure.lang.Fn sep-trans]
   (when (not-empty src)
     (let [e (first src)
           n (next src)]
 
       ;; skipping white characters immediately
       (if (dfl-whitechar? e)
-        (recur n sep-pred)
+        (recur n sep-pred sep-trans)
 
         (lazy-seq
          (if-let [c (*vals-to-digits* e)]
 
            ;; adding another number
-           (cons c (digitize-core-gen n sep-pred))
+           (cons c (digitize-core-gen n sep-pred sep-trans))
 
            ;; adding separator (if detected)
            (if (sep-pred e)
-             (cons e (digitize-core-gen n sep-pred))
+             (cons (sep-trans e) (digitize-core-gen n sep-pred sep-trans))
 
              ;; spreading numbers (if enabled)
              (if (and *spread-numbers* (digital-number? e))
-               (digitize-core-gen (concat (num->digits e) n) sep-pred)
+               (digitize-core-gen (concat (num->digits e) n) sep-pred sep-trans)
                (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))
 
 (defn- digitize-seq
@@ -615,7 +682,7 @@
   ([^clojure.lang.ISeq src
     ^Number       num-drop
     ^Number       num-take]
-   (let [r (digitize-seq src)]
+   (when-some [r (digitize-seq src)]
      (if *numeric-mode*
        (subseq-signed r num-drop num-take)
        (safe-subseq   r num-drop (+' num-take num-drop)))))
@@ -623,16 +690,18 @@
     ^Number       num-take]
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
-   (if *numeric-mode*
-     (fix-sign-seq (digitize-core-num src false false))
-     (digitize-core-gen src (dfl-separator)))))
+   (not-empty
+    (if *numeric-mode*
+      (fix-sign-seq (digitize-core-num src false false))
+      (digitize-core-gen src (dfl-separator) (dfl-translator))))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
   {:added "1.0.0"
    :tag Number}
   [^Number n]
-  (when (digital-number? n) n))
+  (if (digital-number? n) n
+      (dig-throw-arg "Given number cannot be expressed as a sequence of digits.")))
 
 (defn- digitize-char
   "Changes numeric character into normalized representation. Returns
@@ -697,93 +766,141 @@
 ;; Digitizing protocol
 
 (defprotocol Digitizing
-  "States that a collection is able to store digits that could be then
-  used to produce valid numeric values."
+  "States that a collection is able to store digits that in some circumstances
+  could be used to produce valid numeric values."
 
   (digitize
    [coll]
    "Ensures that coll is digital by sanitizing it and performing basic
   validation. If the process succeeds it returns a sequence which elements
-  are normalized versions of elements from coll. Digital means that the
-  collection consist of numbers from 0 to 9 (as Byte objects) and optional
-  + or - sign (as Character object) in front.
+  are normalized versions of elements from coll. Normalized collection
+  consist of numbers from 0 to 9 (as Byte objects after normalization) and
+  optional + or - sign (as Character objects after normalization) in front.
 
-  Normalization means that white characters are removed, digits (that might be
-  characters, numbers, strings, symbols or keys) are changed to their
+  During normalization white characters are removed, digits (that might be
+  characters, numbers, strings, symbols or keys) are changed into their
   numerical representations and first plus and minus signs (encoded as
   characters, strings, keywords, symbols or built-in function objects) are
-  changed into + or - characters.")
+  changed into + or - characters.
+
+  When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
+  the validation is more strict. It means that the + or - sign must appear
+  just once, before any digit and the only valid separator (besides one of white
+  characters and nil) is decimal dot (but only when decimal-point mode
+  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  generic mode is enabled (*numeric-mode* is set to false) so the input does
+  not need to express correct number, just a bunch of digits and separators.")
 
   (digital?
    [coll]
-   "Checks if a given object is digital. Returns true if it is, false otherwise.
+   "Checks if the given object is digital. Returns true if it is, false otherwise.
   Digital means that the collection, string or a numeric type object consist
-  of numbers from 0 to 9 and optional + or - sign in front and a decimal dot
-  character (if decimal mode is enabled). Uses normalized version of the given
-  collection (internally calls the digitize function).")
+  of numbers from 0 to 9 and optional separators.
+
+  This function normalizes the given object by calling cutils.digits/digitize
+  and forces generic mode by setting cutils.digits/*numeric-mode* to false.")
+
+  (numeric?
+   [coll]
+   "Checks if the given object is digital and expresses a valid, decimal number.
+  Returns true if it is, false otherwise.
+
+  Numeric means that the collection, string or a numeric type object consist
+  of numbers from 0 to 9, optional + or - sign in front and a decimal dot
+  character (only if decimal mode is enabled  by setting
+  cutils.digits/*decimal-point-mode* to true).
+
+  This function normalizes the given object by calling cutils.digits/digitize
+  and forces numeric mode by setting cutils.digits/*numeric-mode* to true.")
 
   (digits->num
    [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into an integer number. An
-  optional argument num-take controls how many digits to use (from left to
-  right) and num-drop tells how many digits to drop before collecting
-  number. The last one (num-drop) is applied before num-take when both are
+   "Changes a collection of digits given as coll into a number consisting
+  of decimal digits. An optional argument num-take controls how many
+  digits to use (from left to right) and num-drop tells how many digits
+  to drop. The last one (num-drop) is applied before num-take when both are
   given.
 
   Each element of the collection is normalized before performing further
-  operations on it (white characters are removed and digits are changed into
+  operations on it (white characters are removed, digits are changed into
   their numerical representations - Byte objects) and validated (if
   the collection contains other characters the processing is stopped and
   exception is generated).
 
-  If two or three arguments are given (the resulting sequence is going to be
+  This function forces numeric mode by setting cutils.digits/*numeric-mode*
+  to true which causes validation to be more strict. It means that
+  the + or - sign must appear just once, before any digit and the only
+  valid separator (besides one of white characters and nil) is decimal dot
+  (but only when decimal-point mode is enabled by setting
+  cutils.digits/*decimal-point-mode* to true).
+
+  If two or three arguments are given (the resulting number is going to be
   sliced) then the first plus or minus character of the given collection will
   not be taken into account during that operation (won't count when slicing).
 
-  The function returns an integer or nil if something went wrong (e.g. empty
-  collection was given or ranges were mismatched).")
+  The function returns a number or raises an exception if something went
+  wrong (e.g. input sequence was not valid). It returns nil if there was
+  an empty input or mismatched ranges.")
 
   (digits->str
    [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into string containing
-  integer number. An optional argument num-take controls how many digits to
-  use (from left to right) and num-drop tells how many digits to drop before
-  collecting number. The last one (num-drop) is applied before num-take when
-  both are given.
+   "Changes a collection of digits given as coll into a string expressing
+  series of digits. An optional argument num-take controls how many digits to
+  use (from left to right) and num-drop tells how many digits to drop.
+  The last one (num-drop) is applied before num-take when both are given.
 
   Each element of the collection is normalized before performing further
-  operations on it (white characters are removed and digits are changed into
+  operations on it (white characters are removed, digits are changed into
   their numerical representations - Byte objects) and validated (if
   the collection contains other characters the processing is stopped and
   exception is generated).
 
-  If two or three arguments are given (the resulting sequence is going to be
-  sliced) then the first plus or minus character of the given collection will
-  not be taken into account during that operation (won't count when slicing).
+  When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
+  the validation is more strict. It means that the + or - sign must appear
+  just once, before any digit and the only valid separator (besides one of white
+  characters and nil) is decimal dot (but only when decimal-point mode
+  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  generic mode is enabled (*numeric-mode* is set to false) so the input does
+  not need to express correct number, just a bunch of digits and separators.
 
-  The function returns a string or nil if something went wrong (e.g. empty
-  collection was given or ranges were mismatched).")
+  If two or three arguments are given (the resulting string is going to be
+  sliced) then the first plus or minus character of the given collection will
+  not be taken into account during that operation (won't be counted when
+  slicing).
+
+  The function returns a string or raises an exception if something went
+  wrong (e.g. input sequence was not valid). It returns nil if there was
+  an empty input or mismatched ranges.")
 
   (digits->seq
    [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into a sequence. An optional
-  argument num-take controls how many digits to use (from left to right) and
-  num-drop tells how many digits to drop before collecting number. The last
-  one (num-drop) is applied before num-take when both are given.
+   "Changes a collection of digits given as coll into a lazy sequence
+  expressing series of digits. An optional argument num-take controls
+  how many digits to use (from left to right) and num-drop tells how many
+  digits to drop. The last one (num-drop) is applied before num-take
+  when both are given.
 
-  Each element of the collection is normalized before performing further
-  operations on it (white characters are removed and digits are changed into
-  their numerical representations - Byte objects) and validated (if
-  the collection contains other characters the processing is stopped and
-  exception is generated).
+  Each element of the collection is lazily normalized (white characters
+  are removed, digits are changed into their numerical representations
+  - Byte objects) and validated (if the collection contains other
+  characters exception is generated).
+
+  When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
+  the validation is more strict. It means that the + or - sign must appear
+  just once, before any digit and the only valid separator (besides one of white
+  characters and nil) is decimal dot (but only when decimal-point mode
+  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  generic mode is enabled (*numeric-mode* is set to false) so the input does
+  not need to express correct number, just a bunch of digits and separators.
 
   If two or three arguments are given (the resulting sequence is going to be
   sliced) then the first plus or minus character of the given collection will
-  not be taken into account during that operation (won't count when slicing).
+  not be taken into account during that operation (won't be counted when
+  slicing).
 
-  The function returns a lazy sequence or nil if something went wrong (e.g.
-  empty collection was given or ranges were mismatched in a way it would
-  create an empty collection).")
+  The function returns a lazy sequence or nil if there was an empty input
+  or mismatched ranges. During evaluation of sequence elements exceptions
+  might raise if the input value is not valid.")
 
   (digits-fix-dot
    [coll]
@@ -793,13 +910,35 @@
 
   (negative?
    [coll]
-   "Checks if first element of a sequence is a minus sign. Normalizes
-  and validates the given collection. Returns true or false.")
+   "Checks if a collection of digits expresses a negative number.
+  Returns true or false.
+
+  Required amount of elements (until a sign appears) of the collection
+  is normalized (white characters are removed, plus and minus signs
+  expressed as operators, keywords or symbols are changed into characters)
+  and validated (if the collection contains other characters the processing
+  is stopped and false value is returned).
+
+  This function forces numeric mode to be enabled (by setting
+  cutils.digits/*numeric-mode* to true).
+
+  If there is a need to check whether the given, presumably digital value
+  is negative and completely expresses a number or valid collection of digits
+  then cutils.digits/numeric? or cutils.digits/digital? should be used to
+  execute additional checks.")
 
   (count-digits
    [coll]
    "Counts the number of digits in a digital collection, normalizing and
-  validating the collection. Returns number."))
+  validating the collection. Returns a number.
+
+  When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
+  the validation is more strict. It means that the + or - sign must appear
+  just once, before any digit and the only valid separator (besides one of white
+  characters and nil) is decimal dot (but only when decimal-point mode
+  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  generic mode is enabled (*numeric-mode* is set to false) so the input does
+  not need to express correct number, just a bunch of digits and separators."))
 
 (extend-protocol Digitizing
 
@@ -810,15 +949,15 @@
   (digitize
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-seq v))))
   (digital?
-      [^clojure.lang.IPersistentVector  v]                         (some? (digitize-seq v)))
+      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (every? some? (with-generic-mode! (digitize-seq v)))))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-seq v))
     ([^clojure.lang.IPersistentVector   v, ^Number nt]             (digitize-seq v nt))
     ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (digitize-seq v nd nt)))
   (digits->num
-      ([^clojure.lang.IPersistentVector v]                         (seq-digits->num (digits->seq v)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->num (digits->seq v nt)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->num (digits->seq v nd nt))))
+      ([^clojure.lang.IPersistentVector v]                         (seq-digits->num (with-numeric-mode! (digits->seq v))))
+    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->num (with-numeric-mode! (digits->seq v nt))))
+    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->num (with-numeric-mode! (digits->seq v nd nt)))))
   (digits->str
       ([^clojure.lang.IPersistentVector v]                         (seq-digits->str (digits->seq v)))
     ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->str (digits->seq v nt)))
@@ -826,32 +965,36 @@
   (digits-fix-dot
       [^clojure.lang.IPersistentVector  v]                         (not-empty (fix-dot-vec v)))
   (negative?
-      [^clojure.lang.IPersistentVector  v]                         (negative? (digitize-seq v)))
+      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
+  (numeric?
+      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (every? some? (with-numeric-mode! (digitize-seq v)))))
 
   clojure.lang.ISeq
 
   (count-digits
       [^clojure.lang.ISeq s]                                       (seq-count-digits (digitize-seq s)))
   (digitize
-      [^clojure.lang.ISeq s]                                       (not-empty (digitize-seq s)))
+      [^clojure.lang.ISeq s]                                       (seq (digitize-seq s)))
   (digital?
-      [^clojure.lang.ISeq s]                                       (some? (digitize-seq s)))
+      [^clojure.lang.ISeq s]                                       (try-arg-false (every? some? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^clojure.lang.ISeq s]                                      (digitize-seq s))
     ([^clojure.lang.ISeq   s, ^Number nt]                          (digitize-seq s nt))
     ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (digitize-seq s nd nt)))
   (digits->num
-      ([^clojure.lang.ISeq s]                                      (seq-digits->num (digits->seq s)))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->num (digits->seq s nt)))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->num (digits->seq s nd nt))))
+      ([^clojure.lang.ISeq s]                                      (seq-digits->num (with-numeric-mode! (digits->seq s))))
+    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
+    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
   (digits->str
       ([^clojure.lang.ISeq s]                                      (seq-digits->str (digits->seq s)))
     ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digits->seq s nt)))
     ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digits->seq s nd nt))))
   (digits-fix-dot
-      [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
+      [^clojure.lang.ISeq  s]                                      (seq (fix-dot-seq s)))
   (negative?
-      [^clojure.lang.ISeq  s]                                      (contains? *minus-signs* (first s)))
+      [^clojure.lang.ISeq  s]                                      (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+  (numeric?
+      [^clojure.lang.ISeq s]                                       (try-arg-false (every? some? (with-numeric-mode! (digitize-seq s)))))
 
   java.lang.String
 
@@ -860,7 +1003,7 @@
   (digitize
       [^String  s]                                                 (not-empty (seq-digits->str (digitize-seq s))))
   (digital?
-      [^String  s]                                                 (some? (digitize-seq s)))
+      [^String  s]                                                 (try-arg-false (every? some? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^String s]                                                 (digitize-seq s))
     ([^String   s, ^Number nt]                                     (digitize-seq s nt))
@@ -870,18 +1013,20 @@
     ([^String   s, ^Number nt]                                     (seq-digits->str (digits->seq s nt)))
     ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->str (digits->seq s nd nt))))
   (digits->num
-      ([^String s]                                                 (seq-digits->num (digits->seq s)))
-    ([^String   s, ^Number nt]                                     (seq-digits->num (digits->seq s nt)))
-    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->num (digits->seq s nd nt))))
+      ([^String s]                                                 (seq-digits->num (with-numeric-mode! (digits->seq s))))
+    ([^String   s, ^Number nt]                                     (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
+    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
   (digits-fix-dot
       [^String  s]                                                 (not-empty (fix-dot-str s)))
   (negative?
-      [^String  s]                                                 (negative? (digitize-seq s)))
+      [^String  s]                                                 (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+  (numeric?
+      [^String  s]                                                 (try-arg-false (every? some? (with-numeric-mode! (digitize-seq s)))))
 
   clojure.lang.Symbol
 
   (count-digits
-      [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize (str s))))
+      [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize-seq (str s))))
   (digitize
       [^clojure.lang.Symbol  s]                                    (when-let [x (digitize (str s))] (symbol x)))
   (digital?
@@ -901,12 +1046,14 @@
   (digits-fix-dot
       [^clojure.lang.Symbol  s]                                    (when-let [x (fix-dot-str (str s))] (symbol x)))
   (negative?
-      [^clojure.lang.Symbol  s]                                    (negative? (digitize-seq (str s))))
+      [^clojure.lang.Symbol  s]                                    (negative? (str s)))
+  (numeric?
+      [^clojure.lang.Symbol  s]                                    (numeric? (str s)))
 
   clojure.lang.Keyword
 
   (count-digits
-      [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize (str s))))
+      [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize-seq (str s))))
   (digitize
       [^clojure.lang.Keyword  s]                                   (when-let [x (digitize (str s))] (keyword x)))
   (digital?
@@ -926,7 +1073,9 @@
   (digits-fix-dot
       [^clojure.lang.Keyword  s]                                   (when-let [x (fix-dot-str (str s))] (keyword x)))
   (negative?
-      [^clojure.lang.Keyword  s]                                   (negative? (digitize-seq (str s))))
+      [^clojure.lang.Keyword  s]                                   (negative? (str s)))
+  (numeric?
+      [^clojure.lang.Keyword  s]                                   (numeric? (str s)))
 
   java.lang.Character
 
@@ -935,7 +1084,7 @@
   (digitize
       [^Character  c]                                              (digitize-char c))
   (digital?
-      [^Character  c]                                              (some? (digitize-char c)))
+      [^Character  c]                                              (try-arg-false (some? (with-generic-mode! (digitize-char c)))))
   (digits->seq
       ([^Character c]                                              (lazy-seq (cons (digitize-char c) nil)))
     ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
@@ -951,7 +1100,9 @@
   (digits-fix-dot
       [^Character  c]                                              (when-not (dot? c) c))
   (negative?
-      [^Character  c]                                              (negative? (digitize-char c)))
+      [^Character  c]                                              (try-arg-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
+  (numeric?
+      [^Character  c]                                              (try-arg-false (some? (with-numeric-mode! (digitize-char c)))))
 
   java.lang.Number
 
@@ -960,7 +1111,7 @@
   (digitize
       [^Number  n]                                                 (digitize-num n))
   (digital?
-      [^Number n]                                                  (some? (digitize-num n)))
+      [^Number n]                                                  (try-arg-false (some? (digitize-num n))))
   (digits->seq
       ([^Number n]                                                 (num->digits (digitize-num n)))
     ([^Number   n, ^Number nt]                                     (subseq-signed (digits->seq n) 0 nt))
@@ -970,13 +1121,15 @@
     ([^Number   n, ^Number nt]                                     (digits->num (digits->seq n nt)))
     ([^Number   n, ^Number nd, ^Number nt]                         (digits->num (digits->seq n nd nt))))
   (digits->str
-      ([^Number n]                                                 (digitize (str n)))
-    ([^Number n, ^Number nt]                                       (subs-signed (digitize (str n)) nt))
-    ([^Number n, ^Number nd, ^Number nt]                           (subs-signed (digitize (str n)) nd nt)))
+      ([^Number n]                                                 (digitize-seq (str n)))
+    ([^Number n, ^Number nt]                                       (subs-signed (digitize-seq (str n)) nt))
+    ([^Number n, ^Number nd, ^Number nt]                           (subs-signed (digitize-seq (str n)) nd nt)))
   (digits-fix-dot
       [^Number n]                                                  n)
   (negative?
       [^Number  n]                                                 (neg? n))
+  (numeric?
+      [^Number n]                                                  (digital? n))
 
   nil
 
@@ -984,6 +1137,7 @@
   (digitize       [o]   nil)
   (digital?       [o] false)
   (negative?      [o] false)
+  (numeric?       [o] false)
   (digits-fix-dot [o]   nil)
   (digits->seq
       ([o]     nil)
