@@ -618,7 +618,7 @@
   {:added "1.0.0"
    :tag String}
   [^clojure.lang.ISeq s]
-  (not-empty (reduce str s)))
+  (not-empty (reduce str "" s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Normalization and validation
@@ -627,7 +627,7 @@
   [^clojure.lang.ISeq src
    ^Boolean had-number?
    ^Boolean had-point?]
-  (when (not-empty src)
+  (when (seq src)
     (let [e (first src)
           e (if (string? e) (str-trim e) e)
           n (next src)]
@@ -665,7 +665,7 @@
   [^clojure.lang.ISeq src
    ^clojure.lang.Fn sep-pred
    ^clojure.lang.Fn sep-trans]
-  (when (not-empty src)
+  (when (seq src)
     (let [e (first src)
           n (next src)]
 
@@ -989,7 +989,7 @@
   (count-digits
       [^clojure.lang.ISeq s]                                       (seq-count-digits (digitize-seq s)))
   (digitize
-      [^clojure.lang.ISeq s]                                       (seq (digitize-seq s)))
+      [^clojure.lang.ISeq s]                                       (digitize-seq s))
   (digital?
       [^clojure.lang.ISeq s]                                       (try-arg-false (every? some? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
@@ -1005,7 +1005,7 @@
     ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digits->seq s nt)))
     ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digits->seq s nd nt))))
   (digits-fix-dot
-      [^clojure.lang.ISeq  s]                                      (seq (fix-dot-seq s)))
+      [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
   (negative?
       [^clojure.lang.ISeq  s]                                      (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
   (numeric?
@@ -1101,7 +1101,7 @@
   (digital?
       [^Character  c]                                              (try-arg-false (some? (with-generic-mode! (digitize-char c)))))
   (digits->seq
-      ([^Character c]                                              (lazy-seq (cons (digitize-char c) nil)))
+      ([^Character c]                                              (not-empty (lazy-seq (cons (digitize-char c) nil))))
     ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
     ([^Character   c, ^Number nd, ^Number nt]                      (subseq-signed (digits->seq c) nd nt)))
   (digits->str
@@ -1136,15 +1136,36 @@
     ([^Number   n, ^Number nt]                                     (digits->num (digits->seq n nt)))
     ([^Number   n, ^Number nd, ^Number nt]                         (digits->num (digits->seq n nd nt))))
   (digits->str
-      ([^Number n]                                                 (digitize-seq (str n)))
-    ([^Number n, ^Number nt]                                       (subs-signed (digitize-seq (str n)) nt))
-    ([^Number n, ^Number nd, ^Number nt]                           (subs-signed (digitize-seq (str n)) nd nt)))
+      ([^Number n]                                                 (not-empty (str (digitize-num n))))
+    ([^Number n, ^Number nt]                                       (seq-digits->str (digits->seq n nt)))
+    ([^Number n, ^Number nd, ^Number nt]                           (seq-digits->str (digits->seq n nd nt))))
   (digits-fix-dot
       [^Number n]                                                  n)
   (negative?
       [^Number  n]                                                 (neg? n))
   (numeric?
       [^Number n]                                                  (digital? n))
+
+  Object
+
+  (count-digits   [o] (count-digits   (->str o)))
+  (digitize       [o] (digitize       (->str o)))
+  (digital?       [o] (digital?       (->str o)))
+  (negative?      [o] (negative?      (->str o)))
+  (numeric?       [o] (numeric?       (->str o)))
+  (digits-fix-dot [o] (digits-fix-dot (->str o)))
+  (digits->seq
+      ([o]     (digits->seq (->str o)))
+    ([o nt]    (digits->seq (->str o) nt))
+    ([o nd nt] (digits->seq (->str o) nd nt)))
+  (digits->num
+      ([o]     (digits->num (->str o)))
+    ([o nt]    (digits->num (->str o) nt))
+    ([o nd nt] (digits->num (->str o) nd nt)))
+  (digits->str
+      ([o]     (digits->str (->str o)))
+    ([o nt]    (digits->str (->str o) nt))
+    ([o nd nt] (digits->str (->str o) nd nt)))
 
   nil
 
