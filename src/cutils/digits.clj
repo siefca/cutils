@@ -26,19 +26,34 @@
        :dynamic true
        :tag Boolean}
   *numeric-mode*
-  "If set to true then enables numeric mode. In this mode only digits,
-  optional decimal point character and a single preceding sign characters are
-  allowed. If numeric mode is disabled then separators are allowed but you may
-  get strange results when converting to numbers (all separators and white
-  characters are omitted)."
+  "If set to true enables numeric mode. In this mode only digits, optional
+  decimal point characters and single sign characters are allowed when
+  normalizing and validating digital values (besides white characters
+  that are ignored).
+
+  If numeric mode is disabled (default) then both numbers and separators
+  are allowed during validation and normalization but there is no guarantee
+  that produced sequences, strings or other sequential collections will be
+  valid expressions of numeric values.
+
+  There are exceptions: cutils.digits/negative?, cutils.digits/numeric?
+  and cutils.digits/digits->num are always forcing numeric mode (even if
+  it was set to false in calling context). That's because for the correct
+  behavior of that functions collections of digits must be treated as if
+  they were expressing numbers.
+
+  Another exception is cutils.digits/digital? that is always forcing
+  generic mode (sets *numeric-mode* to false). It is so because the behavior
+  of that function requires checking whether the given collection is
+  a collection of digits but not necessarily a valid number."
   false)
 
 (def ^{:added "1.0.0"
        :dynamic true
        :tag Boolean}
   *decimal-point-mode*
-  "If set to true then allows decimal dot to appear in a sequence when
-  processing in numeric mode."
+  "If set to true allows decimal dot to appear in a sequence when
+  processing it in numeric mode."
   true)
 
 (def ^{:added "1.0.0"
@@ -935,7 +950,7 @@
   When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
   the validation is more strict. It means that the + or - sign must appear
   just once, before any digit and the only valid separator (besides one of white
-  characters and nil) is decimal dot (but only when decimal-point mode
+  characters and nil) is a decimal dot (but only when decimal-point mode
   is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
   generic mode is enabled (*numeric-mode* is set to false) so the input does
   not need to express correct number, just a bunch of digits and separators."))
@@ -1026,56 +1041,56 @@
   clojure.lang.Symbol
 
   (count-digits
-      [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize-seq (str s))))
+      [^clojure.lang.Symbol  s]                                    (seq-count-digits (digitize-seq (name s))))
   (digitize
-      [^clojure.lang.Symbol  s]                                    (when-let [x (digitize (str s))] (symbol x)))
+      [^clojure.lang.Symbol  s]                                    (when-let [x (digitize (name s))] (symbol x)))
   (digital?
-      [^clojure.lang.Symbol  s]                                    (digital? (str s)))
+      [^clojure.lang.Symbol  s]                                    (digital? (name s)))
   (digits->seq
-      ([^clojure.lang.Symbol s]                                    (digits->seq (str s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->seq (str s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->seq (str s) nd nt)))
+      ([^clojure.lang.Symbol s]                                    (digits->seq (name s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->seq (name s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->seq (name s) nd nt)))
   (digits->str
-      ([^clojure.lang.Symbol s]                                    (digits->str (str s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->str (str s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->str (str s) nd nt)))
+      ([^clojure.lang.Symbol s]                                    (digits->str (name s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->str (name s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->str (name s) nd nt)))
   (digits->num
-      ([^clojure.lang.Symbol s]                                    (digits->num (str s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->num (str s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->num (str s) nd nt)))
+      ([^clojure.lang.Symbol s]                                    (digits->num (name s)))
+    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->num (name s) nt))
+    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->num (name s) nd nt)))
   (digits-fix-dot
-      [^clojure.lang.Symbol  s]                                    (when-let [x (fix-dot-str (str s))] (symbol x)))
+      [^clojure.lang.Symbol  s]                                    (when-let [x (fix-dot-str (name s))] (symbol x)))
   (negative?
-      [^clojure.lang.Symbol  s]                                    (negative? (str s)))
+      [^clojure.lang.Symbol  s]                                    (negative? (name s)))
   (numeric?
-      [^clojure.lang.Symbol  s]                                    (numeric? (str s)))
+      [^clojure.lang.Symbol  s]                                    (numeric? (name s)))
 
   clojure.lang.Keyword
 
   (count-digits
-      [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize-seq (str s))))
+      [^clojure.lang.Keyword  s]                                   (seq-count-digits (digitize-seq (name s))))
   (digitize
-      [^clojure.lang.Keyword  s]                                   (when-let [x (digitize (str s))] (keyword x)))
+      [^clojure.lang.Keyword  s]                                   (when-let [x (digitize (name s))] (keyword x)))
   (digital?
-      [^clojure.lang.Keyword  s]                                   (digital? (str s)))
+      [^clojure.lang.Keyword  s]                                   (digital? (name s)))
   (digits->seq
-      ([^clojure.lang.Keyword s]                                   (digits->seq (str s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->seq (str s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->seq (str s) nd nt)))
+      ([^clojure.lang.Keyword s]                                   (digits->seq (name s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->seq (name s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->seq (name s) nd nt)))
   (digits->str
-      ([^clojure.lang.Keyword s]                                   (digits->str (str s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->str (str s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->str (str s) nd nt)))
+      ([^clojure.lang.Keyword s]                                   (digits->str (name s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->str (name s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->str (name s) nd nt)))
   (digits->num
-      ([^clojure.lang.Keyword s]                                   (digits->num (str s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->num (str s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->num (str s) nd nt)))
+      ([^clojure.lang.Keyword s]                                   (digits->num (name s)))
+    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->num (name s) nt))
+    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->num (name s) nd nt)))
   (digits-fix-dot
-      [^clojure.lang.Keyword  s]                                   (when-let [x (fix-dot-str (str s))] (keyword x)))
+      [^clojure.lang.Keyword  s]                                   (when-let [x (fix-dot-str (name s))] (keyword x)))
   (negative?
-      [^clojure.lang.Keyword  s]                                   (negative? (str s)))
+      [^clojure.lang.Keyword  s]                                   (negative? (name s)))
   (numeric?
-      [^clojure.lang.Keyword  s]                                   (numeric? (str s)))
+      [^clojure.lang.Keyword  s]                                   (numeric? (name s)))
 
   java.lang.Character
 
