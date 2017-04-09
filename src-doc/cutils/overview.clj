@@ -140,7 +140,7 @@ Additionally `cutils.digits` contains functions that can be used to:
 * Count number of digits in a digital collection.
 "
 
-[[:subsection {:title "decimal-point-char?" :tag "decimal-point-char"}]]
+[[:subsection {:title "decimal-point-char?" :tag "decimal-point-char?"}]]
 
 [[{:tag "decimal-point-char-synopsis" :title "Synopsis" :numbered false}]]
 (comment
