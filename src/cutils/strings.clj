@@ -66,3 +66,10 @@
    :tag Integer}
   [^String s]
   (some-> str->num int))
+
+(defn ->str
+  "Like clojure.core/str but aware of symbols and keywords and for them calls clojure.core/name."
+  {:added "1.0.0"
+   :tag String}
+  [& more]
+  (apply str (map #(if (or (keyword? %) (symbol? %)) (name %) %) more)))
