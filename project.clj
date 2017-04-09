@@ -8,7 +8,7 @@
   :profiles {:dev {:dependencies [[midje                   "1.8.3"]
                                   [helpshift/hydrox       "0.1.15"]
                                   [im.chit/vinyasa.inject  "0.3.4"]]
-                   :plugins      [[lein-midje                "3.2"]
+                   :plugins      [[lein-midje              "3.2.1"]
                                   [lein-environ            "1.0.1"]]
                    :injections   [(require '[vinyasa.inject :as inject])
                                   (inject/in [hydrox.core dive surface generate-docs

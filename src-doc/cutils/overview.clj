@@ -14,7 +14,7 @@ Currently provided macros, functions and dynamic variables are:
   * [`decimal-point-char?`](#decimal-point-char?) – checks if a character is decimal point character,
   * [`count-digits`](#count-digits) – counts the number of digits in a digital collection,
   * [`digit?`](#digit?) – checks if a given object is a digit,
-  * [`digital?`](#digital?) – checks if a given collection expresses digits,
+  * [`digital?`](#digital?) – checks if a given collection expresses series of digits with optional separators,
   * [`digital-number?`](#digital-number) – checks if a given, numeric object can express digit,
   * [`digitize`](#digitize) – ensures that a given collection is digital (expresses digits),
   * [`digits->num`](#digits-num) – converts a collection of digits to a number,
@@ -22,7 +22,8 @@ Currently provided macros, functions and dynamic variables are:
   * [`digits->str`](#digits-str) – converts a collection of digits to a string,
   * [`digits-fix-dot`](#digits-fix-dot) – fixes orphaned dots in digital collection,
   * [`dot?`](#dot) – returns `true` if character is defined dot character,
-  * [`negative?`](#negative?) – checks if a collection is digital and expresses negative number,
+  * [`negative?`](#negative?) – checks if a collection expresses negative number,
+  * [`numeric?`](#numeric?) – checks if a collection expresses (can be converted to) a number,
   * [`num->digits`](#num-digits) – converts a number to a sequence of digits,   
 
   * [`*decimal-point-mode*`](#var-decimal-point-mode) – allows decimal point character to appear during sequencing,
@@ -38,6 +39,11 @@ Currently provided macros, functions and dynamic variables are:
   * [`*spread-numbers*`](#var-spread-numbers) – enables spreading numbers into digits during sequencing,
   * [`*white-chars*`](#var-white-chars) – defines a set of common blank characters,
   * [`*vals-to-digits*`](#var-vals-to-digits) – defines a map for digits disambiguation;   
+
+  * [`with-decimal-point-mode!`](#with-decimal-point-mode) – evaluates code with decimal-point mode enabled,
+  * [`with-generic-mode!`](#with-generic-mode) – evaluates code with numeric mode disabled,
+  * [`with-numeric-mode!`](#with-numeric-mode) – evaluates code with numeric mode enabled,
+  * [`with-spread-numbers!`](#with-spread-numbers) – evaluates code with spreading numbers enabled;
 
 * **[`cutils.padding/`](#cutils.padding)**
   * [`pad`](#pad) – pads a collection with a given value,
@@ -103,106 +109,48 @@ conversions of dates."
   (cutils.dates/month->num m))
 
 "
-Changes a name of a month to its numeric value using first 4, 3 or 2 letters
-of a given string.
+Changes a name of a month to its numeric value (position number in
+Gregorian calendar) using first 4, 3 or 2 letters of a given string.
 
 If there is no match then it returns `nil`.
 "
 
-[[:file {:src "test/cutils/dates/month->num.clj" :tag "month-num-usage-ex"}]]
+[[:file {:src "test/cutils/dates/month-num.clj" :tag "month-num-usage-ex"}]]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 [[:section {:title "cutils.digits" :tag "cutils.digits"}]]
 
-" The `cutils.digits` namespace is a home for the `Digitizing` protocol. If a
-data type implements this protocol it is able to operate on collections of
+"
+The `cutils.digits` namespace is a home for the `Digitizing` protocol. If
+a data type implements this protocol it is able to operate on collections of
 digits, especially:
 
-* validate it by checking if it is a series of digits that can express a number,
-* convert it to number,
-* convert it to string,
-* convert it to sequence of numbers.
+* Validate it by checking if it is a series of digits and optional separators.
+* Validate it by checking if it is a series of digits that can express a number.
+* Normalize it by removing white characters.
+* Convert it to a number.
+* Convert it to a string.
+* Convert it to a lazy sequence.
 
 Additionally `cutils.digits` contains functions that can be used to:
 
-* check if a numeric value can be a valid digit in a collection,
-* convert a number to a sequence of digits,
-* count number of digits in a digital collection.
-
-  (digitize
-   [coll]
-   "Ensures that coll is digital by normalizing it and performing basic
-validation. If the process succeeded it returns cleaned version of coll,
-otherwise it returns nil. Digital means that the collection consist of
-numbers from 0 to 9 (as numbers) and optional + or - sign (as a character)
-in front.
-
-Normalization means that white characters are removed, digits (that might be
-                                                                    characters, numbers, strings, symbols or keys) are changed to their
-numerical representations and first plus and minus signs (encoded as
-                                                                  characters, strings, keywords, symbols or built-in function objects) are
-changed into characters.")
-
-  (digits->num
-   [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into integer number. An
-optional argument num-take controls how many digits to use (from left to
-                                                                 right) and num-drop tells how many digits to drop before collecting
-number. The last one (num-drop) is applied before num-take when both are
-given.
-
-Before slicing the collection is normalized (white characters are removed
-                                                   and digits are changed into numerical representation) and validated (if the
-collection contains other characters operation is stopped and nil is
-returned). The first plus or minus character will not be taken into account
-during slicing.
-
-The function returns an integer or nil if something went wrong (e.g. empty
-                                                                     collection was given or ranges were mismatched).")
-
-  (digits->str
-   [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into string containing
-integer number. An optional argument num-take controls how many digits to
-use (from left to right) and num-drop tells how many digits to drop before
-collecting number. The last one (num-drop) is applied before num-take when
-both are given.
-
-Before slicing the collection is normalized (white characters are removed
-                                                   and digits are changed into numerical representation) and validated (if the
-collection contains other characters operation is stopped and nil is
-returned). The first plus or minus character will not be taken into account
-during slicing.
-
-The function returns a string or nil if something went wrong (e.g. empty
-                                                                   collection was given or ranges were mismatched).")
-
-  (digits->seq
-   [coll] [coll num-take] [coll num-drop num-take]
-   "Changes a collection of digits given as coll into a sequence. An optional
-argument num-take controls how many digits to use (from left to right) and
-num-drop tells how many digits to drop before collecting number. The last
-one (num-drop) is applied before num-take when both are given.
-
-Before slicing the collection is normalized (white characters are removed
-                                                   and digits are changed into numerical representation) and validated (if the
-collection contains other characters operation is stopped and nil is
-returned). The first plus or minus character will not be taken into account
-during slicing.
-
-The function returns a sequence or nil if something went wrong (e.g. empty
-                                                                     collection was given or ranges were mismatched)."))
-.
-
+* Check if a numeric value can be a valid digit in a collection.
+* Convert a number to a sequence of digits.
+* Count number of digits in a digital collection.
 "
 
-(defn digital-number?
-  "Returns true if the given number n can be used to express a collection of
-  digits with optional sign. Returns false otherwise."
-  {:added "1.0.0"
-   :const true
-   :tag java.lang.Boolean}
-  [^Number n]
-  (contains? *digital-numbers* (class n)))
+[[:subsection {:title "decimal-point-char?" :tag "decimal-point-char"}]]
 
+[[{:tag "decimal-point-char-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/decimal-point-char? c))
+
+"
+Returns `true` if the given argument is a character classified as
+a decimal point separator by searching a set `cutils.digits/*decimal-point-chars*`.
+
+If there is no match then it returns `false`.
+"
+
+[[:file {:src "test/cutils/digits/decimal-point-char.clj" :tag "decimal-point-char-ex"}]]
