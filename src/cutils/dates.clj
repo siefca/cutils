@@ -6,15 +6,19 @@
     cutils.dates
 
   (:require [cutils.core]
+            [cutils.strings :refer :all]
+            [cutils.digits  :as d]
             [clojure.string :as s]))
 
 (cutils.core/init)
 
 (def ^{:private true
        :const true
-       :added "0.1"}
+       :added "1.0.0"}
   mnames
-  {:jan   1, :feb  2, :apr  4, :may  5, :jun  6, :jul  7,
+  {:1     1, :2    2, :3    3, :4    4, :5    5, :6    6,
+   :7     7, :8    8, :9    9, :10  10, :11  11, :12  12,
+   :jan   1, :feb  2, :apr  4, :may  5, :jun  6, :jul  7,
    :aug   8, :sep  9, :oct 10, :nov 11, :dec 11,
    :mär   3, :mai  5, :okt 10, :dez 12,
    :led   1, :úno  2, :bře  3, :dub  4, :kvě  5, :čer  6,
@@ -40,17 +44,22 @@
    :しちが 7, :はちが 8,:くがつ 9,:じゅうが 10,:じゅうい 11,:じゅうに 12,
    :一月 1, :二月 2, :三月 3, :四月 4, :五月 5, :六月 6, :七月 7,
    :八月 8, :九月 9, :十月 10, :十一月 11, :十二月 12,
+   :一 1, :二 2, :三 3, :四 4, :五 5, :六 6, :七 7,
+   :八 8, :九 9, :十 10, :十一 11, :十二 12,
    :sty   1, :lut  2, :mar  3, :kwi  4, :maj  5, :cze  6,
    :lip   7, :sie  8, :wrz  9, :paź 10, :lis 11, :gru 12})
 
 (defn- jmonthn
   [m]
-  (some-> m s/join lower-case keyword mnames))
+  (some-> m s/join s/lower-case keyword mnames))
 
 (defn month->num
-  "Changes a name of a month to its numeric value."
+  "Changes a name of a month to its numeric value.
+  Returns a number or nil."
   [m]
-  (when-let [n (some->> m pstr (take 4))]
-    (or (jmonthn n)
-        (jmonthn (butlast n))
-        (jmonthn (butlast (butlast n))))))
+  (if (d/numeric? m)
+    (jmonthn (d/with-numeric-mode! (d/digits->str m)))
+    (when-let [m (some->> m ->str str-trim (take 4))]
+      (or (jmonthn m)
+          (jmonthn (butlast m))
+          (jmonthn (butlast (butlast m)))))))
