@@ -9,9 +9,10 @@ Currently provided macros, functions and dynamic variables are:
 
 * **[`cutils.dates/`](#cutils.dates)**
   * [`month->num`](#month-num) – changes name of a month to its numeric value;   
+   
 
 * **[`cutils.digits/`](#cutils.digits)**
-  * [`decimal-point-char?`](#decimal-point-char?) – checks if a character is decimal point character,
+  * [`decimal-mark?`](#decimal-mark?) – checks if a character is decimal mark character,
   * [`count-digits`](#count-digits) – counts the number of digits in a digital collection,
   * [`digit?`](#digit?) – checks if a given object is a digit,
   * [`digital?`](#digital?) – checks if a given collection expresses series of digits with optional separators,
@@ -24,10 +25,11 @@ Currently provided macros, functions and dynamic variables are:
   * [`dot?`](#dot) – returns `true` if character is defined dot character,
   * [`negative?`](#negative?) – checks if a collection expresses negative number,
   * [`numeric?`](#numeric?) – checks if a collection expresses (can be converted to) a number,
-  * [`num->digits`](#num-digits) – converts a number to a sequence of digits,   
+  * [`num->digits`](#num-digits) – converts a number to a sequence of digits;   
+   
 
-  * [`*decimal-point-mode*`](#var-decimal-point-mode) – allows decimal point character to appear during sequencing,
-  * [`*decimal-point-chars*`](#var-decimal-point-chars) – defines a set of decimal point characters,
+  * [`*decimal-mark-mode*`](#var-decimal-mark-mode) – allows decimal mark character to appear during sequencing,
+  * [`*decimal-mark-chars*`](#var-decimal-mark-chars) – defines a set of decimal mark characters,
   * [`*digital-numbers*`](#var-digital-numbers) – defines a set of types that are valid representations of digits,
   * [`*dot-char*`](#var-dot-char) – defines a dot character,
   * [`*minus-signs*`](#var-minus-signs) – defines a set of values that are recognized as minus signs,
@@ -39,15 +41,18 @@ Currently provided macros, functions and dynamic variables are:
   * [`*spread-numbers*`](#var-spread-numbers) – enables spreading numbers into digits during sequencing,
   * [`*white-chars*`](#var-white-chars) – defines a set of common blank characters,
   * [`*vals-to-digits*`](#var-vals-to-digits) – defines a map for digits disambiguation;   
+   
 
-  * [`with-decimal-point-mode!`](#with-decimal-point-mode) – evaluates code with decimal-point mode enabled,
+  * [`with-decimal-mark-mode!`](#with-decimal-mark-mode) – evaluates code with decimal mark mode enabled,
   * [`with-generic-mode!`](#with-generic-mode) – evaluates code with numeric mode disabled,
   * [`with-numeric-mode!`](#with-numeric-mode) – evaluates code with numeric mode enabled,
   * [`with-spread-numbers!`](#with-spread-numbers) – evaluates code with spreading numbers enabled;
+   
 
 * **[`cutils.padding/`](#cutils.padding)**
   * [`pad`](#pad) – pads a collection with a given value,
   * [`pad-with-fn`](#pad-with-fn) – pads a collection with a result of a given function;   
+   
 
 * **[`cutils.ranges/`](#cutils.ranges)**
   * [`drop-take`](#drop-take) – calls `drop` and then `take` on a collection,
@@ -61,6 +66,7 @@ Currently provided macros, functions and dynamic variables are:
   * [`subvec-preserve`](#subvec-preserve) – safely creates a subvector preserving first character,
   * [`vec-first`](#vec-first) – returns first element of a vector,
   * [`vec-first-idx`](#vec-first-idx) – returns index of first element of a vector for which predicate is true;   
+   
 
 * **[`cutils.strings/`](#cutils.strings)**
   * [`str-clean`](#str-clean) – removes white characters from beginning and end of a string,
@@ -123,34 +129,65 @@ If there is no match then it returns `nil`.
 
 "
 The `cutils.digits` namespace is a home for the `Digitizing` protocol. If
-a data type implements this protocol it is able to operate on collections of
-digits, especially:
+a data type implements this protocol it is able to express series of
+digits.
 
-* Validate it by checking if it is a series of digits and optional separators.
-* Validate it by checking if it is a series of digits that can express a number.
-* Normalize it by removing white characters.
-* Convert it to a number.
-* Convert it to a string.
-* Convert it to a lazy sequence.
+Series of digits can be **generic** or **numeric** – it depends on what
+they are composed of. Generic series of digits may contain multiple
+separators and does not need to express a valid number. On the contrary
+the numeric series of digits must express a number and the only meaningful
+elements that may appear in it (besides digits) are plus and minus signs
+and (optional) decimal mark.
 
-Additionally `cutils.digits` contains functions that can be used to:
+
+ might contain
+separators and itre s not intended to express a valid number. The second one
+expresses a valid number
+
+ and the values can be:
+
+* Validated  by checking if they are a series of digits and optional separators.
+* Validated by checking if they are a series of digits that can express a number.
+* Normalize them by removing white characters.
+* Convert them to a numbers.
+* Convert them to a strings.
+* Convert them to a lazy sequences.
+
+The `cutils.digits` namespace contains functions implementing
+`Digitizing` protocol for strings, vectors, sequences (objects implementing `ISeq`
+interface), numbers, keywords, symbols and nil objects. It also defines the
+protocol for `Object` type, providing fallback (by converting values to strings
+and calling functions on them).
+
+Additionaly 
+
+that
+can be used to:
 
 * Check if a numeric value can be a valid digit in a collection.
 * Convert a number to a sequence of digits.
 * Count number of digits in a digital collection.
 "
 
-[[:subsection {:title "decimal-point-char?" :tag "decimal-point-char?"}]]
+[[:subsection {:title "decimal-mark?" :tag "decimal-mark?"}]]
 
-[[{:tag "decimal-point-char-synopsis" :title "Synopsis" :numbered false}]]
+[[{:tag "decimal-mark-synopsis" :title "Synopsis" :numbered false}]]
 (comment
-  (cutils.digits/decimal-point-char? c))
+  (cutils.digits/decimal-mark? c))
 
 "
 Returns `true` if the given argument is a character classified as
-a decimal point separator by searching a set `cutils.digits/*decimal-point-chars*`.
+a decimal mark by searching a set `cutils.digits/*decimal-mark-chars*`.
 
 If there is no match then it returns `false`.
 "
 
-[[:file {:src "test/cutils/digits/decimal-point-char.clj" :tag "decimal-point-char-ex"}]]
+[[:file {:src "test/cutils/digits/decimal-mark.clj" :tag "decimal-mark-ex"}]]
+
+
+
+
+
+* [`count-digits`](#count-digits) – counts the number of digits in a digital collection,
+* [`digit?`](#digit?) – checks if a given object is a digit,
+* [`digital?`](#digital?) – checks if a given collection expresses series of digits with optional separators,

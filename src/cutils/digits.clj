@@ -27,7 +27,7 @@
        :tag Boolean}
   *numeric-mode*
   "If set to true enables numeric mode. In this mode only digits, optional
-  decimal point characters and single sign characters are allowed when
+  decimal mark characters and single sign characters are allowed when
   normalizing and validating digital values (besides white characters
   that are ignored).
 
@@ -51,7 +51,7 @@
 (def ^{:added "1.0.0"
        :dynamic true
        :tag Boolean}
-  *decimal-point-mode*
+  *decimal-mark-mode*
   "If set to true allows decimal dot to appear in a sequence when
   processing it in numeric mode."
   true)
@@ -65,7 +65,7 @@
 (def ^{:added "1.0.0"
        :dynamic true
        :tag clojure.lang.IPersistentSet}
-  *decimal-point-chars*
+  *decimal-mark-chars*
   (let [ds (str *dot-char*)]
     (conj #{'. \. :. \, ', (keyword \,) \· \· \՝ \։ \، \؍
             \٫
@@ -185,13 +185,13 @@
   [& body]
   `(binding [cutils.digits/*numeric-mode* false] ~@body))
 
-(defmacro with-decimal-point-mode!
-  "Enables numeric mode processing and decimal-point detection
+(defmacro with-decimal-mark-mode!
+  "Enables numeric mode processing and decimal mark detection
   for the given S-expression."
   {:added "1.0.0"}
   [& body]
-  `(binding [cutils.digits/*numeric-mode*       true
-             cutils.digits/*decimal-point-mode* true] ~@body))
+  `(binding [cutils.digits/*numeric-mode*      true
+             cutils.digits/*decimal-mark-mode* true] ~@body))
 
 (defmacro with-spread-numbers!
   "Enables numbers spreading when processing digital sequences
@@ -210,12 +210,12 @@
   [^Character c]
   (= *dot-char* c))
 
-(defn decimal-point-char?
-  "True if the given argument is decimal point character."
+(defn decimal-mark?
+  "True if the given argument is decimal mark character."
   {:added "1.0.0"
    :tag Boolean}
   [^Character c]
-  (contains? *decimal-point-chars* c))
+  (contains? *decimal-mark-chars* c))
 
 (defn- pow10
   "Calculates 10 to the power of n."
@@ -403,8 +403,8 @@
 
 (defn- num-count-digits
   "Counts digits of the given number. Returns the total number of digits. If
-  *decimal-point-mode* is enabled then the result includes also the count of
-  decimal digits. If *decimal-point-mode* is disabled then the result
+  *decimal-mark-mode* is enabled then the result includes also the count of
+  decimal digits. If *decimal-mark-mode* is disabled then the result
   is just the number of integer digits."
   {:added "1.0.0"
    :tag Number}
@@ -412,7 +412,7 @@
   (if (zero? n) 1
       (let [n (bigdec n)
             t (.precision n)]
-        (if *decimal-point-mode* t
+        (if *decimal-mark-mode* t
             (let [i (-' t (.scale n))]
               (if (> i Long/MAX_VALUE) i (long i)))))))
 
@@ -441,7 +441,7 @@
              res-int    (num->digits-core
                          (bigint n)
                          (pow10 (if (<= digits-int 1) 0 (dec' digits-int))))]
-         (if (or (not *decimal-point-mode*) (zero? digits-dec))
+         (if (or (not *decimal-mark-mode*) (zero? digits-dec))
            res-int
            (concat
             res-int
@@ -611,7 +611,7 @@
   [^clojure.lang.ISeq coll]
   (let [is-minus? (contains? *minus-signs* (first coll))
         coll      (if is-minus? (next coll) coll)
-        r         ((if *decimal-point-mode* seq-dec->num seq-long->num) coll)]
+        r         ((if *decimal-mark-mode* seq-dec->num seq-long->num) coll)]
     (if is-minus? (-' r) r)))
 
 (defn- seq-digits->str
@@ -626,39 +626,39 @@
 (defn- digitize-core-num
   [^clojure.lang.ISeq src
    ^Boolean had-number?
-   ^Boolean had-point?]
+   ^Boolean had-mark?]
   (when (seq src)
     (let [e (first src)
           e (if (string? e) (str-trim e) e)
           n (next src)]
       (if (dfl-whitechar? e)
-        (recur n had-number? had-point?)
+        (recur n had-number? had-mark?)
         (lazy-seq
          (if-let [c (*vals-to-digits* e)]
 
            ;; adding another number
-           (cons c (digitize-core-num n true had-point?))
+           (cons c (digitize-core-num n true had-mark?))
            (if-let [c (*sign-to-char* e)]
 
              ;; adding positive or negative sign
              (if-not had-number?
-               (cons c (digitize-core-num n true had-point?))
+               (cons c (digitize-core-num n true had-mark?))
                (dig-throw-arg "The sign of a number should occur once and precede first digit"))
 
              ;; spreading numbers (if spread numbers is enabled)
              (if (and *spread-numbers* (digital-number? e))
-               (digitize-core-num (concat (num->digits e) n) had-number? had-point?)
+               (digitize-core-num (concat (num->digits e) n) had-number? had-mark?)
 
-               ;; handling decimal point mode (if enabled)
-               (if *decimal-point-mode*
-                 (if (decimal-point-char? e)
-                   (if had-point?
-                     (dig-throw-arg "The decimal point character should occur just once")
+               ;; handling decimal mark mode (if enabled)
+               (if *decimal-mark-mode*
+                 (if (decimal-mark? e)
+                   (if had-mark?
+                     (dig-throw-arg "The decimal mark should occur just once")
                      (cons *dot-char* (digitize-core-num n had-number? true)))
-                   (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal point separator: " e))
+                   (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal mark: " e))
 
-                 (if (decimal-point-char? e)
-                   (dig-throw-arg "Sequence element is a decimal point separator but decimal-point-mode is disabled: " e)
+                 (if (decimal-mark? e)
+                   (dig-throw-arg "Sequence element is a decimal mark but decimal-mark-mode is disabled: " e)
                    (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))))
 
 (defn- digitize-core-gen
@@ -801,8 +801,8 @@
   When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
   the validation is more strict. It means that the + or - sign must appear
   just once, before any digit and the only valid separator (besides one of white
-  characters and nil) is decimal dot (but only when decimal-point mode
-  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  characters and nil) is decimal dot (but only when decimal mark mode
+  is enabled by setting cutils.digits/*decimal-mark-mode* to true). By default
   generic mode is enabled (*numeric-mode* is set to false) so the input does
   not need to express correct number, just a bunch of digits and separators.")
 
@@ -823,7 +823,7 @@
   Numeric means that the collection, string or a numeric type object consist
   of numbers from 0 to 9, optional + or - sign in front and a decimal dot
   character (only if decimal mode is enabled  by setting
-  cutils.digits/*decimal-point-mode* to true).
+  cutils.digits/*decimal-mark-mode* to true).
 
   This function normalizes the given object by calling cutils.digits/digitize
   and forces numeric mode by setting cutils.digits/*numeric-mode* to true.")
@@ -846,8 +846,8 @@
   to true which causes validation to be more strict. It means that
   the + or - sign must appear just once, before any digit and the only
   valid separator (besides one of white characters and nil) is decimal dot
-  (but only when decimal-point mode is enabled by setting
-  cutils.digits/*decimal-point-mode* to true).
+  (but only when decimal-mark mode is enabled by setting
+  cutils.digits/*decimal-mark-mode* to true).
 
   If two or three arguments are given (the resulting number is going to be
   sliced) then the first plus or minus character of the given collection will
@@ -873,8 +873,8 @@
   When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
   the validation is more strict. It means that the + or - sign must appear
   just once, before any digit and the only valid separator (besides one of white
-  characters and nil) is decimal dot (but only when decimal-point mode
-  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  characters and nil) is decimal dot (but only when decimal-mark mode
+  is enabled by setting cutils.digits/*decimal-mark-mode* to true). By default
   generic mode is enabled (*numeric-mode* is set to false) so the input does
   not need to express correct number, just a bunch of digits and separators.
 
@@ -903,8 +903,8 @@
   When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
   the validation is more strict. It means that the + or - sign must appear
   just once, before any digit and the only valid separator (besides one of white
-  characters and nil) is decimal dot (but only when decimal-point mode
-  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  characters and nil) is decimal dot (but only when decimal mark mode
+  is enabled by setting cutils.digits/*decimal-mark-mode* to true). By default
   generic mode is enabled (*numeric-mode* is set to false) so the input does
   not need to express correct number, just a bunch of digits and separators.
 
@@ -950,8 +950,8 @@
   When numeric mode is enabled (by setting cutils.digits/*numeric-mode* to true)
   the validation is more strict. It means that the + or - sign must appear
   just once, before any digit and the only valid separator (besides one of white
-  characters and nil) is a decimal dot (but only when decimal-point mode
-  is enabled by setting cutils.digits/*decimal-point-mode* to true). By default
+  characters and nil) is a decimal dot (but only when decimal mark mode
+  is enabled by setting cutils.digits/*decimal-mark-mode* to true). By default
   generic mode is enabled (*numeric-mode* is set to false) so the input does
   not need to express correct number, just a bunch of digits and separators."))
 
