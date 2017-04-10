@@ -15,8 +15,9 @@
   (dates/month->num    "kw")  => 4
   (dates/month->num   "mar")  => 3
   (dates/month->num "marze")  => 3
-  (dates/month->num     :lu)  => 2
-  (dates/month->num     'st)  => 1
+  (dates/month->num   "may")  => 5
+  (dates/month->num    :jan)  => 1
+  (dates/month->num    'feb)  => 2
   (dates/month->num   [1 2])  => 12
   (dates/month->num [1 2 3])  => nil)
 
