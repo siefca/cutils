@@ -77,7 +77,9 @@
             \። \᙮ \᛫ \᠃ \᠉ \⳹ \⳾ \᠂ \᠈ \߸ \፣ \․ }
           ds
           (symbol  ds)
-          (keyword ds))))
+          (keyword ds)
+          (str ds)
+          (str \,))))
 
 (def ^{:added "1.0.0"
        :dynamic true
@@ -93,10 +95,16 @@
     java.math.BigDecimal})
 
 (def ^{:added "1.0.0"
+       :const true
+       :tag clojure.lang.ISeq}
+  java-digital-bytes
+  (map byte (range 0 10)))
+
+(def ^{:added "1.0.0"
        :dynamic true
        :tag clojure.lang.IPersistentMap}
   *vals-to-digits*
-  (let [snum (map byte (range 0 10))
+  (let [snum java-digital-bytes
         nums (mapcat (partial repeat 2)     snum)               ;; bytes 0-9
         bigs (mapcat (juxt bigdec identity) snum)               ;; big decimals 0-9
         strs (mapcat (juxt str    identity) snum)               ;; strings "0"-"9"
@@ -247,6 +255,13 @@
   [^Number n]
   (contains? *digital-numbers* (class n)))
 
+(defn byte-digit?
+  "Returns true if the given object is a digit and is a kind of java.lang.Byte."
+  {:added "1.0.0"
+   :tag java.lang.Boolean}
+  [^Number n]
+  (and (instance? Byte n) (<= 0 n 9)))
+
 (defn digit?
   "Returns true if the given object is a digit."
   {:added "1.0.0"
@@ -300,6 +315,10 @@
     (fn [o] (get *separators-translate* o o))
     identity))
 
+(defmacro or-false
+  [& body]
+  `(or (try-arg-false ~@body) false))
+
 (defn- subs-signed
   "Safely creates a substring preserving its first character when it is a plus
   or a minus sign. Preservation means that a mathematical sign (if present
@@ -309,13 +328,11 @@
    :tag String}
   ([^String s
     ^Number start]
-   (not-empty
-    (subs-preserve s *signs* start)))
+   (not-empty (subs-preserve s *signs* start)))
   ([^String s
     ^Number start
     ^Number num]
-   (not-empty
-    (subs-preserve s *signs* start (+' start num)))))
+   (not-empty (subs-preserve s *signs* start (+' start num)))))
 
 (defn- subseq-signed
   "Safely creates a subsequence preserving its first character when it is
@@ -326,13 +343,11 @@
    :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq s
     ^Number num-drop]
-   (not-empty
-    (subseq-preserve s *signs* num-drop)))
+   (not-empty (subseq-preserve s *signs* num-drop)))
   ([^clojure.lang.ISeq s
     ^Number num-drop
     ^Number num-take]
-   (not-empty
-    (subseq-preserve s *signs* num-drop (+' num-take num-drop)))))
+   (not-empty (subseq-preserve s *signs* num-drop (+' num-take num-drop)))))
 
 (defn- subvec-signed
   "Safely creates a subvector preserving its first element when it is a plus
@@ -343,13 +358,11 @@
    :tag clojure.lang.IPersistentVector}
   ([^clojure.lang.IPersistentVector v
     ^Number                     start]
-   (not-empty
-    (subvec-preserve v *signs* start)))
+   (not-empty (subvec-preserve v *signs* start)))
   ([^clojure.lang.IPersistentVector v
     ^Number                     start
     ^Number                       num]
-   (not-empty
-    (subvec-preserve v *signs* start (+' start num)))))
+   (not-empty (subvec-preserve v *signs* start (+' start num)))))
 
 (defn- fix-sign-seq
   "Removes plus character from the head of a sequential collection."
@@ -727,7 +740,7 @@
   (when-some [x c]
     (if (digit? x)
       (get *vals-to-digits* x)
-      (dig-throw-arg "Given character does not express a digit: " x))))
+      (dig-throw-arg "Given character does not express a digit: " (str x)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Decimal dot fixing
@@ -964,7 +977,7 @@
   (digitize
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-seq v))))
   (digital?
-      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (every? some? (with-generic-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (or-false (some byte-digit? (with-generic-mode! (digitize-seq v)))))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-seq v))
     ([^clojure.lang.IPersistentVector   v, ^Number nt]             (digitize-seq v nt))
@@ -980,9 +993,9 @@
   (digits-fix-dot
       [^clojure.lang.IPersistentVector  v]                         (not-empty (fix-dot-vec v)))
   (negative?
-      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (or-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
   (numeric?
-      [^clojure.lang.IPersistentVector  v]                         (try-arg-false (every? some? (with-numeric-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (or-false (some byte-digit? (with-numeric-mode! (digitize-seq v)))))
 
   clojure.lang.ISeq
 
@@ -991,7 +1004,7 @@
   (digitize
       [^clojure.lang.ISeq s]                                       (digitize-seq s))
   (digital?
-      [^clojure.lang.ISeq s]                                       (try-arg-false (every? some? (with-generic-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq s]                                       (or-false (some byte-digit? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^clojure.lang.ISeq s]                                      (digitize-seq s))
     ([^clojure.lang.ISeq   s, ^Number nt]                          (digitize-seq s nt))
@@ -1007,9 +1020,9 @@
   (digits-fix-dot
       [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
   (negative?
-      [^clojure.lang.ISeq  s]                                      (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq  s]                                      (or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
   (numeric?
-      [^clojure.lang.ISeq s]                                       (try-arg-false (every? some? (with-numeric-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq s]                                       (or-false (some byte-digit? (with-numeric-mode! (digitize-seq s)))))
 
   java.lang.String
 
@@ -1018,7 +1031,7 @@
   (digitize
       [^String  s]                                                 (not-empty (seq-digits->str (digitize-seq s))))
   (digital?
-      [^String  s]                                                 (try-arg-false (every? some? (with-generic-mode! (digitize-seq s)))))
+      [^String  s]                                                 (or-false (some byte-digit? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^String s]                                                 (digitize-seq s))
     ([^String   s, ^Number nt]                                     (digitize-seq s nt))
@@ -1034,9 +1047,9 @@
   (digits-fix-dot
       [^String  s]                                                 (not-empty (fix-dot-str s)))
   (negative?
-      [^String  s]                                                 (try-arg-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+      [^String  s]                                                 (or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
   (numeric?
-      [^String  s]                                                 (try-arg-false (every? some? (with-numeric-mode! (digitize-seq s)))))
+      [^String  s]                                                 (or-false (some byte-digit? (with-numeric-mode! (digitize-seq s)))))
 
   clojure.lang.Symbol
 
@@ -1099,7 +1112,7 @@
   (digitize
       [^Character  c]                                              (digitize-char c))
   (digital?
-      [^Character  c]                                              (try-arg-false (some? (with-generic-mode! (digitize-char c)))))
+      [^Character  c]                                              (or-false (byte-digit? (with-generic-mode! (digitize-char c)))))
   (digits->seq
       ([^Character c]                                              (not-empty (lazy-seq (cons (digitize-char c) nil))))
     ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
@@ -1115,9 +1128,9 @@
   (digits-fix-dot
       [^Character  c]                                              (when-not (dot? c) c))
   (negative?
-      [^Character  c]                                              (try-arg-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
+      [^Character  c]                                              (or-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
   (numeric?
-      [^Character  c]                                              (try-arg-false (some? (with-numeric-mode! (digitize-char c)))))
+      [^Character  c]                                              (or-false (byte-digit? (with-numeric-mode! (digitize-char c)))))
 
   java.lang.Number
 
@@ -1126,7 +1139,7 @@
   (digitize
       [^Number  n]                                                 (digitize-num n))
   (digital?
-      [^Number n]                                                  (try-arg-false (some? (digitize-num n))))
+      [^Number n]                                                  (or-false (some? (digitize-num n))))
   (digits->seq
       ([^Number n]                                                 (num->digits (digitize-num n)))
     ([^Number   n, ^Number nt]                                     (subseq-signed (digits->seq n) 0 nt))
