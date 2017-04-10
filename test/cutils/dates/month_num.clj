@@ -1,4 +1,4 @@
-(ns cutils.dates.month-num
+(ns cutils.dates.month_num
   (:use midje.sweet)
   (:require [cutils.dates :as dates]))
 
@@ -20,11 +20,3 @@
   (dates/month->num    'feb)  => 2
   (dates/month->num   [1 2])  => 12
   (dates/month->num [1 2 3])  => nil)
-
-[[{:tag "month->num-usage-notfun" :title "Handling invalid values by <code>month->num</code>"}]]
-^{:refer dates/month->num :added "1.0.0"}
-(fact
-
-  (dates/month->num        )  => (throws clojure.lang.ArityException)
-  (dates/month->num nil nil)  => (throws clojure.lang.ArityException)
-  (dates/month->num   1   1)  => (throws clojure.lang.ArityException))

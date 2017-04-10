@@ -43,10 +43,10 @@ Currently provided macros, functions and dynamic variables are:
   * [`*vals-to-digits*`](#var-vals-to-digits) – defines a map for digits disambiguation;   
    
 
-  * [`with-decimal-mark-mode!`](#with-decimal-mark-mode) – evaluates code with decimal mark mode enabled,
-  * [`with-generic-mode!`](#with-generic-mode) – evaluates code with numeric mode disabled,
-  * [`with-numeric-mode!`](#with-numeric-mode) – evaluates code with numeric mode enabled,
-  * [`with-spread-numbers!`](#with-spread-numbers) – evaluates code with spreading numbers enabled;
+  * [`with-decimal-mark-mode!`](#with-decimal-mark-mode!) – evaluates code with decimal mark mode enabled,
+  * [`with-generic-mode!`](#with-generic-mode!) – evaluates code with numeric mode disabled,
+  * [`with-numeric-mode!`](#with-numeric-mode!) – evaluates code with numeric mode enabled,
+  * [`with-spread-numbers!`](#with-spread-numbers!) – evaluates code with spreading numbers enabled;
    
 
 * **[`cutils.padding/`](#cutils.padding)**
@@ -135,38 +135,67 @@ digits.
 Series of digits can be **generic** or **numeric** – it depends on what
 they are composed of. Generic series of digits may contain multiple
 separators and does not need to express a valid number. On the contrary
-the numeric series of digits must express a number and the only meaningful
-elements that may appear in it (besides digits) are plus and minus signs
-and (optional) decimal mark.
+numeric series of digits must express a number and the only meaningful
+elements that may appear in it (besides digits) are plus sign, minus signs
+and a decimal mark (when decimal mark mode is in use).
 
+Examples of generic series of digits:
 
- might contain
-separators and itre s not intended to express a valid number. The second one
-expresses a valid number
+* `\"555-11-123-55-10\"`
+* `\"555-11 123-55-10\"`
+* `[555 - 11 123 - 55 - 10]`
+* `'(5 5 5 \".\" 1 1 \" \" 1 2 3 \"-\" 5 5 1 0)`
+* `:1-2-3`
+* `(symbol \"123\")`
 
- and the values can be:
+Examples of numeric series of digits:
 
-* Validated  by checking if they are a series of digits and optional separators.
-* Validated by checking if they are a series of digits that can express a number.
-* Normalize them by removing white characters.
-* Convert them to a numbers.
-* Convert them to a strings.
-* Convert them to a lazy sequences.
+* `\"555 11 123 55 10\"`
+* `\"-555 11 123 55 10\"`
+* `\"+555 11 123 55 10\"`
+* `[- 555 11 123 55 10]`
+* `'(5 5 5 1 1 \" \" 1 2 3 5 5 1 0 \".\" 1)`
+* `555111235510`
+* `:123`
 
-The `cutils.digits` namespace contains functions implementing
-`Digitizing` protocol for strings, vectors, sequences (objects implementing `ISeq`
-interface), numbers, keywords, symbols and nil objects. It also defines the
-protocol for `Object` type, providing fallback (by converting values to strings
-and calling functions on them).
+Long story short: numeric series of digits can be converted to a valid number.
 
-Additionaly 
+Functions that are required to be defined when `Digitizing` protocol is implemented
+for a data type should:
 
-that
-can be used to:
+* Validate series by checking if they are generic series of digits ([`cutils.digits/digital?`](#digital?)).
+* Validate series by checking if they are numeric series of digits ([`cutils.digits/numeric?`](#numeric?)).
+* Normalize series by removing meaningless elements ([`cutils.digits/digitize`](#digitize)).
+* Convert series to numbers ([`cutils.digits/digits->num`](#digits-num)).
+* Convert series to strings ([`cutils.digits/digits->str`](#digits-str)).
+* Convert series to (lazy) sequences ([`cutils.digits/digits->seq`](#digits-seq)).
+* Fix trailing or preceding decimal marks in series ([`cutils.digits/digits-fix-dot`](#digits-fix-dot)).
+* Check if series expresses negative value ([`cutils.digits/negative?`](#negative?)).
+* Count digits in series ([`cutils.digits/count-digits`](#count-digits)).
 
-* Check if a numeric value can be a valid digit in a collection.
-* Convert a number to a sequence of digits.
-* Count number of digits in a digital collection.
+The `cutils.digits` namespace contains functions implementing `Digitizing`
+protocol for strings, vectors, sequences (objects implementing `ISeq`),
+numbers (but no fractions), keywords, symbols and nil objects. It also
+implements the protocol for `Object` type, providing fallback (by converting
+values to strings and calling respective functions on the result).
+
+The default mode for all functions is generic mode. To change the mode the
+`cutils.digits/*numeric-mode*` dynamic variable should be set to
+`true` (e.g. using `bindind` form or convenient macro
+`cutils.digits/with-numeric-mode!`).
+
+There are some exceptions: The functions `digits->num`, `numeric?` and
+`negative?` will enforce numeric mode (the last one will enforce it but will
+not validate whole sequence as numeric, just first characters) because it's
+required for their correct operation. On the contrary the function `digital?`
+will always enforce generic mode since it tests series for being digital, not
+strictly numeric.
+
+All protocol functions except `digits-fix-dot`, `digital?`, `numeric?` and
+`fix-dot` will normalize input before operating on it and validate it which
+may lead to raising an exception if it's malformed (e.g. series containing
+strange elements, series expected to be numeric containing separators or
+multiple sign symbols).
 "
 
 [[:subsection {:title "decimal-mark?" :tag "decimal-mark?"}]]
@@ -176,18 +205,64 @@ can be used to:
   (cutils.digits/decimal-mark? c))
 
 "
-Returns `true` if the given argument is a character classified as
-a decimal mark by searching a set `cutils.digits/*decimal-mark-chars*`.
+Returns `true` if the given argument is classified as a decimal mark
+by searching a set `cutils.digits/*decimal-mark-chars*`.
 
 If there is no match then it returns `false`.
 "
 
-[[:file {:src "test/cutils/digits/decimal-mark.clj" :tag "decimal-mark-ex"}]]
+[[:file {:src "test/cutils/digits/decimal_mark.clj" :tag "decimal-mark-ex"}]]
 
 
+[[:subsection {:title "count-digits" :tag "count-digits"}]]
+
+[[{:tag "count-digits-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/count-digits coll))
+
+"
+Counts the number of digits in series, normalizing and validating the input.
+Returns a number.
+
+When numeric mode is enabled (by
+setting [`cutils.digits/*numeric-mode*`](#var-numeric-mode) to `true` or by
+using [`cutils.digits/with-numeric-mode!`](#with-numeric-mode!)) the
+validation is more strict. It means that the `+` or `-` sign must appear just
+once, before any digit and the only valid separator (besides one of white
+characters and `nil`) is a decimal mark (but only when decimal mark mode is
+enabled by
+setting [`cutils.digits/*decimal-mark-mode*`](#var-decimal-mark-mode) to
+`true` or by
+using [`cutils.digits/with-decimal-mark-mode!`](#with-decimal-mark-mode!)). If
+the input series is malformed then an exception is raised.
+
+By default generic mode is used during validation and normalization so the
+input does not need to express correct number, just a bunch of digits and
+separators.
+"
+
+[[:file {:src "test/cutils/digits/count_digits.clj" :tag "count-digits-ex"}]]
 
 
+[[:subsection {:title "digital?" :tag "digital?"}]]
 
-* [`count-digits`](#count-digits) – counts the number of digits in a digital collection,
-* [`digit?`](#digit?) – checks if a given object is a digit,
-* [`digital?`](#digital?) – checks if a given collection expresses series of digits with optional separators,
+[[{:tag "digital-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/digital? coll))
+
+"
+Checks if the given object is digital. Returns `true` if it is, `false`
+otherwise. Digital means that the series of elements consist of numbers
+from 0 to 9 and optional separators.
+
+This function normalizes the given object by
+calling [`cutils.digits/digitize`](#digitize) and forces generic mode by
+setting [`cutils.digits/*numeric-mode*`](#var-numeric-mode) to `false`.
+
+If the input series is malformed no exception is raised but `false` value is
+returned.
+"
+
+[[:file {:src "test/cutils/digits/digital.clj" :tag "digital-ex"}]]
+
+
