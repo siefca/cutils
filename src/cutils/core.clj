@@ -30,5 +30,15 @@
   `(try-val ~val IllegalArgumentException ~@body))
 
 (defmacro try-arg-false
+  "Executes body catching IllegalArgumentException and if there is
+  an exception it returns false."
   [& body]
   `(try-arg false ~@body))
+
+(defmacro try-arg-nil
+  "Executes body catching IllegalArgumentException and if there is
+  an exception it returns nil."
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
+  [& body]
+  `(try-arg nil ~@body))

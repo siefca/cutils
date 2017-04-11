@@ -187,19 +187,35 @@
   [& body]
   `(binding [cutils.digits/*numeric-mode* true] ~@body))
 
+(defmacro without-numeric-mode!
+  "Disables numeric mode processing for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*numeric-mode* false] ~@body))
+
 (defmacro with-generic-mode!
   "Disables numeric mode processing for the given S-expression."
   {:added "1.0.0"}
   [& body]
   `(binding [cutils.digits/*numeric-mode* false] ~@body))
 
-(defmacro with-decimal-mark-mode!
-  "Enables numeric mode processing and decimal mark detection
-  for the given S-expression."
+(defmacro without-generic-mode!
+  "Enables numeric mode processing for the given S-expression."
   {:added "1.0.0"}
   [& body]
-  `(binding [cutils.digits/*numeric-mode*      true
-             cutils.digits/*decimal-mark-mode* true] ~@body))
+  `(binding [cutils.digits/*numeric-mode* true] ~@body))
+
+(defmacro with-decimal-mark-mode!
+  "Enables decimal mark detection for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*decimal-mark-mode* true] ~@body))
+
+(defmacro without-decimal-mark-mode!
+  "Disables decimal mark detection for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*decimal-mark-mode* false] ~@body))
 
 (defmacro with-spread-numbers!
   "Enables numbers spreading when processing digital sequences
@@ -207,6 +223,13 @@
   {:added "1.0.0"}
   [& body]
   `(binding [cutils.digits/*spread-numbers* true] ~@body))
+
+(defmacro without-spread-numbers!
+  "Enables numbers spreading when processing digital sequences
+  for the given S-expression."
+  {:added "1.0.0"}
+  [& body]
+  `(binding [cutils.digits/*spread-numbers* false] ~@body))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
@@ -262,6 +285,28 @@
   [^Number n]
   (and (instance? Byte n) (<= 0 n 9)))
 
+(defn- some-byte-digit?
+  "Returns true if the given collection has at least one digit that is
+  a kind of java.lang.Byte. Otherwise it returns nil.
+
+  If the second argument is present it controls how many first elements
+  to test."
+  {:added "1.0.0"
+   :tag java.lang.Boolean}
+  ([^clojure.lang.ISeq coll]          (some byte-digit? coll))
+  ([^long n, ^clojure.lang.ISeq coll] (some byte-digit? (take n coll))))
+
+(defn- some-byte-digit
+  "Returns coll if the given collection has at least one digit that is
+  a kind of java.lang.Byte. Otherwise it returns nil.
+
+  If the second argument is present it controls how many first elements
+  to test."
+  {:added "1.0.0"
+   :tag java.lang.Boolean}
+  ([^clojure.lang.ISeq coll]          (and (some-byte-digit?) coll))
+  ([^long n, ^clojure.lang.ISeq coll] (and (some-byte-digit? n coll) coll)))
+
 (defn digit?
   "Returns true if the given object is a digit."
   {:added "1.0.0"
@@ -315,7 +360,11 @@
     (fn [o] (get *separators-translate* o o))
     identity))
 
-(defmacro or-false
+(defmacro try-or-false
+  "Executes body catching IllegalArgumentException and if the result is
+  false or nil it returns false."
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
   [& body]
   `(or (try-arg-false ~@body) false))
 
@@ -369,8 +418,9 @@
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^clojure.lang.ISeq coll]
-  (lazy-seq
-   (if (= \+ (first coll)) (next coll) coll)))
+  (if (= \+ (first coll))
+    (when-some [r (next coll)] (lazy-seq r))
+    coll))
 
 (defn- seq-negative?
   "Returns true if the digital sequence is valid and
@@ -668,11 +718,11 @@
                    (if had-mark?
                      (dig-throw-arg "The decimal mark should occur just once")
                      (cons *dot-char* (digitize-core-num n had-number? true)))
-                   (dig-throw-arg "Sequence element is not a single digit, not a sign nor a decimal mark: " e))
+                   (dig-throw-arg "Element is not a single digit, not a sign nor a decimal mark: " e))
 
                  (if (decimal-mark? e)
-                   (dig-throw-arg "Sequence element is a decimal mark but decimal-mark-mode is disabled: " e)
-                   (dig-throw-arg "Sequence element is not a single digit nor a sign: " e)))))))))))
+                   (dig-throw-arg "Element is a decimal mark but decimal-mark-mode is disabled: " e)
+                   (dig-throw-arg "Element is not a single digit nor a sign: " e)))))))))))
 
 (defn- digitize-core-gen
   [^clojure.lang.ISeq src
@@ -699,9 +749,9 @@
              ;; spreading numbers (if enabled)
              (if (and *spread-numbers* (digital-number? e))
                (digitize-core-gen (concat (num->digits e) n) sep-pred sep-trans)
-               (dig-throw-arg "Sequence element is not a single digit nor a separator: " e)))))))))
+               (dig-throw-arg "Element is not a single digit nor a separator: " e)))))))))
 
-(defn- digitize-seq
+(defn digitize-seq
   "Normalizes collection of digits by calling the digitize-core-gen or
   digitize-core-num and optionally slices the resulting collection,
   preserving minus sign and optional separators."
@@ -718,10 +768,14 @@
     ^Number       num-take]
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
-   (not-empty
-    (if *numeric-mode*
-      (fix-sign-seq (digitize-core-num src false false))
-      (digitize-core-gen src (dfl-separator) (dfl-translator))))))
+   (if *numeric-mode*
+     (when-some [r (not-empty (digitize-core-num src false false))]
+       (if (some-byte-digit? 3 r)
+         (fix-sign-seq r)
+         (dig-throw-arg "No digits found in a numeric series")))
+     (when-some [r (not-empty (digitize-core-gen src (dfl-separator) (dfl-translator)))]
+       (if (or (byte-digit? (first r)) (some? (second r))) r
+           (dig-throw-arg "No digits found in a series"))))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
@@ -977,7 +1031,7 @@
   (digitize
       [^clojure.lang.IPersistentVector  v]                         (not-empty (vec (digitize-seq v))))
   (digital?
-      [^clojure.lang.IPersistentVector  v]                         (or-false (some byte-digit? (with-generic-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq v)))))
   (digits->seq
       ([^clojure.lang.IPersistentVector v]                         (digitize-seq v))
     ([^clojure.lang.IPersistentVector   v, ^Number nt]             (digitize-seq v nt))
@@ -993,9 +1047,9 @@
   (digits-fix-dot
       [^clojure.lang.IPersistentVector  v]                         (not-empty (fix-dot-vec v)))
   (negative?
-      [^clojure.lang.IPersistentVector  v]                         (or-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
   (numeric?
-      [^clojure.lang.IPersistentVector  v]                         (or-false (some byte-digit? (with-numeric-mode! (digitize-seq v)))))
+      [^clojure.lang.IPersistentVector  v]                         (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq v)))))
 
   clojure.lang.ISeq
 
@@ -1004,7 +1058,7 @@
   (digitize
       [^clojure.lang.ISeq s]                                       (digitize-seq s))
   (digital?
-      [^clojure.lang.ISeq s]                                       (or-false (some byte-digit? (with-generic-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq s]                                       (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^clojure.lang.ISeq s]                                      (digitize-seq s))
     ([^clojure.lang.ISeq   s, ^Number nt]                          (digitize-seq s nt))
@@ -1020,9 +1074,9 @@
   (digits-fix-dot
       [^clojure.lang.ISeq  s]                                      (not-empty (fix-dot-seq s)))
   (negative?
-      [^clojure.lang.ISeq  s]                                      (or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq  s]                                      (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
   (numeric?
-      [^clojure.lang.ISeq s]                                       (or-false (some byte-digit? (with-numeric-mode! (digitize-seq s)))))
+      [^clojure.lang.ISeq s]                                       (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
 
   java.lang.String
 
@@ -1031,7 +1085,7 @@
   (digitize
       [^String  s]                                                 (not-empty (seq-digits->str (digitize-seq s))))
   (digital?
-      [^String  s]                                                 (or-false (some byte-digit? (with-generic-mode! (digitize-seq s)))))
+      [^String  s]                                                 (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
   (digits->seq
       ([^String s]                                                 (digitize-seq s))
     ([^String   s, ^Number nt]                                     (digitize-seq s nt))
@@ -1047,9 +1101,9 @@
   (digits-fix-dot
       [^String  s]                                                 (not-empty (fix-dot-str s)))
   (negative?
-      [^String  s]                                                 (or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
+      [^String  s]                                                 (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
   (numeric?
-      [^String  s]                                                 (or-false (some byte-digit? (with-numeric-mode! (digitize-seq s)))))
+      [^String  s]                                                 (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
 
   clojure.lang.Symbol
 
@@ -1112,7 +1166,7 @@
   (digitize
       [^Character  c]                                              (digitize-char c))
   (digital?
-      [^Character  c]                                              (or-false (byte-digit? (with-generic-mode! (digitize-char c)))))
+      [^Character  c]                                              (try-or-false (byte-digit? (with-generic-mode! (digitize-char c)))))
   (digits->seq
       ([^Character c]                                              (not-empty (lazy-seq (cons (digitize-char c) nil))))
     ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
@@ -1128,9 +1182,9 @@
   (digits-fix-dot
       [^Character  c]                                              (when-not (dot? c) c))
   (negative?
-      [^Character  c]                                              (or-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
+      [^Character  c]                                              (try-or-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
   (numeric?
-      [^Character  c]                                              (or-false (byte-digit? (with-numeric-mode! (digitize-char c)))))
+      [^Character  c]                                              (try-or-false (byte-digit? (with-numeric-mode! (digitize-char c)))))
 
   java.lang.Number
 
@@ -1139,7 +1193,7 @@
   (digitize
       [^Number  n]                                                 (digitize-num n))
   (digital?
-      [^Number n]                                                  (or-false (some? (digitize-num n))))
+      [^Number n]                                                  (try-or-false (some? (digitize-num n))))
   (digits->seq
       ([^Number n]                                                 (num->digits (digitize-num n)))
     ([^Number   n, ^Number nt]                                     (subseq-signed (digits->seq n) 0 nt))
@@ -1159,26 +1213,26 @@
   (numeric?
       [^Number n]                                                  (digital? n))
 
-  Object
+  clojure.lang.Fn
 
-  (count-digits   [o] (count-digits   (->str o)))
-  (digitize       [o] (digitize       (->str o)))
-  (digital?       [o] (digital?       (->str o)))
-  (negative?      [o] (negative?      (->str o)))
-  (numeric?       [o] (numeric?       (->str o)))
-  (digits-fix-dot [o] (digits-fix-dot (->str o)))
+  (count-digits   [o] (count-digits   (cons o ())))
+  (digitize       [o] (first (digitize       (cons o ()))))
+  (digital?       [o] (digital?       (cons o ())))
+  (negative?      [o] (negative?      (cons o ())))
+  (numeric?       [o] (numeric?       (cons o ())))
+  (digits-fix-dot [o] (first (digits-fix-dot (cons o ()))))
   (digits->seq
-      ([o]     (digits->seq (->str o)))
-    ([o nt]    (digits->seq (->str o) nt))
-    ([o nd nt] (digits->seq (->str o) nd nt)))
+      ([o]     (digits->seq (cons o ())))
+    ([o nt]    (digits->seq (cons o ()) nt))
+    ([o nd nt] (digits->seq (cons o ()) nd nt)))
   (digits->num
-      ([o]     (digits->num (->str o)))
-    ([o nt]    (digits->num (->str o) nt))
-    ([o nd nt] (digits->num (->str o) nd nt)))
+      ([o]     (digits->num (cons o ())))
+    ([o nt]    (digits->num (cons o ()) nt))
+    ([o nd nt] (digits->num (cons o ()) nd nt)))
   (digits->str
-      ([o]     (digits->str (->str o)))
-    ([o nt]    (digits->str (->str o) nt))
-    ([o nd nt] (digits->str (->str o) nd nt)))
+      ([o]     (digits->str (cons o ())))
+    ([o nt]    (digits->str (cons o ()) nt))
+    ([o nd nt] (digits->str (cons o ()) nd nt)))
 
   nil
 
@@ -1202,7 +1256,7 @@
     ([o nd nt] nil)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Marking and checking
+;; Type checking
 
 (defn digitizing?
   "Returns true if coll satisfies the Digitizing protocol."
@@ -1210,4 +1264,43 @@
    :tag Boolean}
   [coll]
   (satisfies? Digitizing coll))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Safe wrappers
+
+(defn try-digitize
+  {:added "1.0.0"}
+  [o]
+  (try-arg-nil (doall (digitize o))))
+
+(defn try-count-digits
+  {:added "1.0.0"
+   :tag Number}
+  [o]
+  (if-some [o (try-arg-nil (count-digits o))] o 0))
+
+(defn try-digits->num
+  {:added "1.0.0"
+   :tag Number}
+  ([o    ] (try-arg-nil (digits->num o)))
+  ([o m  ] (try-arg-nil (digits->num o m)))
+  ([o m n] (try-arg-nil (digits->num o m n))))
+
+(defn try-digits->seq
+  {:added "1.0.0"
+   :tag clojure.lang.ISeq}
+  ([o    ] (try-arg-nil (doall (digits->seq o))))
+  ([o m  ] (try-arg-nil (doall (digits->seq o m))))
+  ([o m n] (try-arg-nil (doall (digits->seq o m n)))))
+
+(defn try-digits->str
+  {:added "1.0.0"
+   :tag String}
+  ([o    ] (try-arg-nil (digits->str o)))
+  ([o m  ] (try-arg-nil (digits->str o m)))
+  ([o m n] (try-arg-nil (digits->str o m n))))
+
+;; TODO: for strings, vectors and numbers (anything but lazy coll)
+;; there should be a validator that fires at the last element of a collection
+;; and checks whether there was any digit in it -- if not then exception
 
