@@ -1,30 +1,33 @@
-(ns cutils.digits.count_digits
+(ns cutils.digits.digits_num
   (:use midje.sweet)
-  (:require [cutils.digits :as digits]))
+  (:require [cutils.digits :refer :all]))
 
-[[{:tag "count-digits-usage" :title "Usage of <code>count-digits</code>"}]]
-^{:refer digits/count-digits :added "1.0.0"}
+[[{:tag "digits-num-usage" :title "Usage of <code>digits->num</code>"}]]
+^{:refer digits->num :added "1.0.0"}
 (fact
 
-  (digits/count-digits         123)  => 3
-  (digits/count-digits       "123")  => 3
-  (digits/count-digits       [123])  => 3
-  (digits/count-digits     [1 2 3])  => 3
-  (digits/count-digits      [-123])  => 3
-  (digits/count-digits    [5 5 -5])  => 3
-  (digits/count-digits [5 - 5 - 5])  => 3
-  (digits/count-digits [5 nil 5 5])  => 3
-  (digits/count-digits         "-")  => 0
-  (digits/count-digits          [])  => 0
-  (digits/count-digits         nil)  => 0
-  (digits/count-digits          "")  => 0)
+  (digits->num         123)  => 123
+  (digits->num       "123")  => 123
+  (digits->num       [123])  => 123
+  (digits->num     [1 2 3])  => 123
+  (digits->num      [+123])  => 123
+  (digits->num      [-123])  => -123
+  (digits->num   [- 1 2 3])  => -123
+  (digits->num   [+ 1 2 3])  => 123
+  (digits->num [5 nil 5 5])  => 555
+  (digits->num         "+")  => nil
+  (digits->num          [])  => nil
+  (digits->num         nil)  => nil
+  (digits->num          "")  => nil)
 
-[[{:tag "count-digits-usage-ex" :title "Handling invalid values by <code>count-digits</code>"}]]
-^{:refer digits/count-digits :added "1.0.0"}
+[[{:tag "digits->num-usage-ex" :title "Handling invalid values by <code>digits->num</code>"}]]
+^{:refer digits->num :added "1.0.0"}
 (fact
 
-  (digits/count-digits         +)  => (throws java.lang.IllegalArgumentException)
-  (digits/count-digits        :a)  => (throws java.lang.IllegalArgumentException)
-  (digits/count-digits "1 a 2 3")  => (throws java.lang.IllegalArgumentException)
-  (digits/with-numeric-mode!
-    (digits/count-digits [5 -5]))  => (throws java.lang.IllegalArgumentException))
+  (digits->num         +)  => (throws java.lang.IllegalArgumentException)
+  (digits->num        :a)  => (throws java.lang.IllegalArgumentException)
+  (digits->num "1 a 2 3")  => (throws java.lang.IllegalArgumentException)
+
+
+  (with-numeric-mode!
+    (digits->num [5 -5]))  => (throws java.lang.IllegalArgumentException))

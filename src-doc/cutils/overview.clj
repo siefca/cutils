@@ -121,7 +121,7 @@ Gregorian calendar) using first 4, 3 or 2 letters of a given string.
 If there is no match then it returns `nil`.
 "
 
-[[:file {:src "test/cutils/dates/month-num.clj" :tag "month-num-usage-ex"}]]
+[[:file {:src "test/cutils/dates/month_num.clj" :tag "month-num-usage-ex"}]]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -266,3 +266,92 @@ returned.
 [[:file {:src "test/cutils/digits/digital.clj" :tag "digital-ex"}]]
 
 
+[[:subsection {:title "digital-number?" :tag "digital-number?"}]]
+
+[[{:tag "digital-number-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/digital-number? coll))
+
+"
+Returns `true` if the given number `n` can be used to express a collection of
+digits with optional sign, `false` otherwise.
+
+The function basically checks the type of the argument.
+"
+
+[[:file {:src "test/cutils/digits/digital_number.clj" :tag "digital-number-ex"}]]
+
+
+[[:subsection {:title "digitize" :tag "digitize"}]]
+
+[[{:tag "digitize-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/digitize coll))
+
+"
+Ensures that `coll` is digital by sanitizing it and performing basic
+validation. If the process succeeds it returns a series of elements that are
+normalized versions of values from `coll`. Normalized output consist of
+numbers from 0 to 9 (as `Byte` objects) and optional `-` sign (as `Character`
+object) in front (if numeric mode was in use and the sign was present in the
+input series).
+
+During normalization white characters are removed, digits (that might be
+characters, numbers, strings, symbols or keys) are changed into their
+numerical, byte representations and separators are preserved (if in generic
+mode). If the dynamic
+variable [`cutils.digits/*spread-numbers*`](#var-spread-numbers) is set to
+`true` (default) then the function will spread the numbers that consist with
+more than one digit by splitting the number and adding each digit separately
+to the result.
+
+When numeric mode is enabled (by
+setting [`cutils.digits/*numeric-mode*`](#var-numeric-mode) to `true` or by
+using [`cutils.digits/with-numeric-mode!`](#with-numeric-mode!)) the
+validation is more strict. It means that the `+` or `-` sign must appear just
+once, before any digit and the only valid separator (besides one of white
+characters and `nil`) is a decimal mark (but only when decimal mark mode is
+enabled by
+setting [`cutils.digits/*decimal-mark-mode*`](#var-decimal-mark-mode) to
+`true` or by
+using [`cutils.digits/with-decimal-mark-mode!`](#with-decimal-mark-mode!)). If
+the input series is malformed then an exception is raised.
+
+By default generic mode is used during validation and normalization so the
+input does not need to express correct number, just a bunch of digits and
+separators.
+"
+
+[[:file {:src "test/cutils/digits/digitize.clj" :tag "digitize-ex"}]]
+
+
+[[:subsection {:title "digits->num" :tag "digits-num"}]]
+
+[[{:tag "digits-num-synopsis" :title "Synopsis" :numbered false}]]
+(comment
+  (cutils.digits/digits->num coll))
+
+"
+
+Changes a collection of digits given as coll into a number consisting of
+decimal digits. An optional argument num-take controls how many digits to
+use (from left to right) and num-drop tells how many digits to drop. The last
+one (num-drop) is applied before num-take when both are given.
+
+The input series is validated and normalized before performing further
+operations on it by calling [`cutils.digits/digitize`](#digitize).
+
+This function forces numeric mode by
+setting [`cutils.digits/*numeric-mode*`](#var-numeric-mode) to `true` which
+causes validation to be more strict.
+
+If two or three arguments are given (the resulting number is going to be
+sliced) then the first plus or minus character of the given collection will
+not be taken into account during that operation (won't count when slicing).
+
+The function returns a number or raises an exception if something went
+wrong (e.g. input sequence was not valid). It returns `nil` if there was an
+empty input or mismatched ranges.
+"
+
+[[:file {:src "test/cutils/digits/digits_num.clj" :tag "digits-num-ex"}]]

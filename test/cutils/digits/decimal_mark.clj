@@ -1,17 +1,17 @@
-(ns cutils.digits.decimal-mark
+(ns cutils.digits.decimal_mark
   (:use midje.sweet)
-  (:require [cutils.digits :as digits]))
+  (:require [cutils.digits :refer :all]))
 
 [[{:tag "decimal-mark-usage" :title "Usage of <code>decimal-mark?</code>"}]]
-^{:refer digits/decimal-mark? :added "1.0.0"}
+^{:refer decimal-mark? :added "1.0.0"}
 (fact
 
-  (digits/decimal-mark?  \.)  => true
-  (digits/decimal-mark? ".")  => true
-  (digits/decimal-mark?  :.)  => true
-  (digits/decimal-mark?  '.)  => true
-  (digits/decimal-mark?  \,)  => true
-  (digits/decimal-mark?   +)  => false
-  (digits/decimal-mark?   -)  => false
-  (digits/decimal-mark? nil)  => false
-  (digits/decimal-mark? 123)  => false)
+  (decimal-mark?  \.)  => true
+  (decimal-mark? ".")  => true
+  (decimal-mark?  :.)  => true
+  (decimal-mark?  '.)  => true
+  (decimal-mark?  \,)  => true
+  (decimal-mark?   +)  => false
+  (decimal-mark?   -)  => false
+  (decimal-mark? nil)  => false
+  (decimal-mark? 123)  => false)
