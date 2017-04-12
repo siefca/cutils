@@ -296,17 +296,6 @@
   ([^clojure.lang.ISeq coll]          (some byte-digit? coll))
   ([^long n, ^clojure.lang.ISeq coll] (some byte-digit? (take n coll))))
 
-(defn- some-byte-digit
-  "Returns coll if the given collection has at least one digit that is
-  a kind of java.lang.Byte. Otherwise it returns nil.
-
-  If the second argument is present it controls how many first elements
-  to test."
-  {:added "1.0.0"
-   :tag java.lang.Boolean}
-  ([^clojure.lang.ISeq coll]          (and (some-byte-digit?) coll))
-  ([^long n, ^clojure.lang.ISeq coll] (and (some-byte-digit? n coll) coll)))
-
 (defn digit?
   "Returns true if the given object is a digit."
   {:added "1.0.0"
@@ -336,7 +325,7 @@
   "Returns true if the given value is a character and is a separator."
   (partial contains? *separator-chars*))
 
-(defn- dfl-separator
+(defn- dfl-separator-fn
   "Returns separator predicate. If the *separator-chars* is empty it returns
   separator-class? function object that checks characters against a list of
   character classes. If *separator-chars* is not empty it returns a function
@@ -351,7 +340,7 @@
        (separator-class? o)
        (separator-chars? o)))))
 
-(defn- dfl-translator
+(defn- dfl-translator-fn
   "Returns a function that translates certain separator objects."
   {:added "1.0.0"
    :tag clojure.lang.Fn}
@@ -686,72 +675,91 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Normalization and validation
 
-(defn- digitize-core-num
-  [^clojure.lang.ISeq src
-   ^Boolean had-number?
-   ^Boolean had-mark?]
-  (when (seq src)
-    (let [e (first src)
-          e (if (string? e) (str-trim e) e)
-          n (next src)]
-      (if (dfl-whitechar? e)
-        (recur n had-number? had-mark?)
+(defn- digitize-core-num-fn
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
+  []
+
+  (let [had-numsig? (volatile! false)
+        had-mark?   (volatile! false)]
+
+    (fn digitize-core-num [^clojure.lang.ISeq src]
+      (when (seq src)
+        (let [e (first src)
+              e (if (string? e) (str-trim e) e)
+              n (next src)]
+          (lazy-seq
+
+           (if (dfl-whitechar? e)
+             (digitize-core-num n)
+             (if-let [c (*vals-to-digits* e)]
+
+               ;; adding another number
+               (do (or @had-numsig? (vreset! had-numsig? true)) (cons c (digitize-core-num n)))
+               (if-let [c (*sign-to-char* e)]
+
+                 ;; adding positive or negative sign
+                 (if @had-numsig?
+                   (dig-throw-arg "The sign of a number should occur once and precede first digit")
+                   (do (vreset! had-numsig? true) (cons c (digitize-core-num n))))
+
+                 ;; spreading numbers (if spread numbers is enabled)
+                 (if (and *spread-numbers* (digital-number? e))
+                   (digitize-core-num (concat (num->digits e) n))
+
+                   ;; handling decimal mark mode (if enabled)
+                   (if *decimal-mark-mode*
+                     (if (decimal-mark? e)
+                       (if @had-mark?
+                         (dig-throw-arg "The decimal mark should occur just once")
+                         (do (vreset! had-mark? true) (cons *dot-char* (digitize-core-num n))))
+                       (dig-throw-arg "Element is not a single digit, not a sign nor a decimal mark: " e))
+
+                     (if (decimal-mark? e)
+                       (dig-throw-arg "Element is a decimal mark but decimal-mark-mode is disabled: " e)
+                       (dig-throw-arg "Element is not a single digit nor a sign: " e)))))))))))))
+
+(defn- digitize-core-gen-fn
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
+  [^clojure.lang.Fn sep-fn
+   ^clojure.lang.Fn trn-fn]
+
+  (fn digitize-core-gen [^clojure.lang.ISeq src]
+    (when (seq src)
+      (let [e (first src)
+            n (next  src)]
+
         (lazy-seq
-         (if-let [c (*vals-to-digits* e)]
+         ;; skipping white characters
+         (if (dfl-whitechar? e)
+           (digitize-core-gen n)
+           (if-let [c (*vals-to-digits* e)]
 
-           ;; adding another number
-           (cons c (digitize-core-num n true had-mark?))
-           (if-let [c (*sign-to-char* e)]
+             ;; adding another number
+             (cons c (digitize-core-gen n))
 
-             ;; adding positive or negative sign
-             (if-not had-number?
-               (cons c (digitize-core-num n true had-mark?))
-               (dig-throw-arg "The sign of a number should occur once and precede first digit"))
+             ;; adding separator (if detected)
+             (if (sep-fn e) (cons (trn-fn e) (digitize-core-gen n))
 
-             ;; spreading numbers (if spread numbers is enabled)
-             (if (and *spread-numbers* (digital-number? e))
-               (digitize-core-num (concat (num->digits e) n) had-number? had-mark?)
+                 ;; spreading numbers (if enabled)
+                 (if (and *spread-numbers* (digital-number? e))
+                   (digitize-core-gen (concat (num->digits e) n))
+                   (dig-throw-arg "Element is not a single digit nor a separator: " e))))))))))
 
-               ;; handling decimal mark mode (if enabled)
-               (if *decimal-mark-mode*
-                 (if (decimal-mark? e)
-                   (if had-mark?
-                     (dig-throw-arg "The decimal mark should occur just once")
-                     (cons *dot-char* (digitize-core-num n had-number? true)))
-                   (dig-throw-arg "Element is not a single digit, not a sign nor a decimal mark: " e))
-
-                 (if (decimal-mark? e)
-                   (dig-throw-arg "Element is a decimal mark but decimal-mark-mode is disabled: " e)
-                   (dig-throw-arg "Element is not a single digit nor a sign: " e)))))))))))
-
-(defn- digitize-core-gen
-  [^clojure.lang.ISeq src
-   ^clojure.lang.Fn sep-pred
-   ^clojure.lang.Fn sep-trans]
+(defn- seek-digits
+  [^clojure.lang.ISeq src]
   (when (seq src)
-    (let [e (first src)
-          n (next src)]
+    (let [had-number? (volatile! false)]
+      ((fn sd [o]
+         (lazy-seq
+          (if (seq o)
+            (let [f (first o)]
+              (and (byte-digit? (first o)) (not @had-number?) (vreset! had-number? true))
+              (cons f (sd (next o))))
+            (when-not @had-number? (dig-throw-arg "No digits found in a series"))))) src))))
 
-      ;; skipping white characters immediately
-      (if (dfl-whitechar? e)
-        (recur n sep-pred sep-trans)
-
-        (lazy-seq
-         (if-let [c (*vals-to-digits* e)]
-
-           ;; adding another number
-           (cons c (digitize-core-gen n sep-pred sep-trans))
-
-           ;; adding separator (if detected)
-           (if (sep-pred e)
-             (cons (sep-trans e) (digitize-core-gen n sep-pred sep-trans))
-
-             ;; spreading numbers (if enabled)
-             (if (and *spread-numbers* (digital-number? e))
-               (digitize-core-gen (concat (num->digits e) n) sep-pred sep-trans)
-               (dig-throw-arg "Element is not a single digit nor a separator: " e)))))))))
-
-(defn digitize-seq
+(defn- digitize-seq-core
   "Normalizes collection of digits by calling the digitize-core-gen or
   digitize-core-num and optionally slices the resulting collection,
   preserving minus sign and optional separators."
@@ -763,19 +771,33 @@
    (when-some [r (digitize-seq src)]
      (if *numeric-mode*
        (subseq-signed r num-drop num-take)
-       (safe-subseq   r num-drop (+' num-take num-drop)))))
+       (safe-subseq r num-drop (+' num-take num-drop)))))
   ([^clojure.lang.ISeq src
     ^Number       num-take]
    (digitize-seq src 0 num-take))
   ([^clojure.lang.ISeq src]
-   (if *numeric-mode*
-     (when-some [r (not-empty (digitize-core-num src false false))]
-       (if (some-byte-digit? 3 r)
-         (fix-sign-seq r)
-         (dig-throw-arg "No digits found in a numeric series")))
-     (when-some [r (not-empty (digitize-core-gen src (dfl-separator) (dfl-translator)))]
-       (if (or (byte-digit? (first r)) (some? (second r))) r
-           (dig-throw-arg "No digits found in a series"))))))
+   (when (seq src)
+     (if *numeric-mode*
+       (let [dcore-num (digitize-core-num-fn)]
+         (when-some [r (not-empty (dcore-num src))]
+           (if (some-byte-digit? 3 r)
+             (fix-sign-seq r)
+             (dig-throw-arg "No digits found in a numeric series"))))
+       (let [dcore-gen (digitize-core-gen-fn (dfl-separator) (dfl-translator))]
+         (not-empty (dcore-gen src)))))))
+
+(defn- digitize-seq
+  {:added "1.0.0"
+   :tag clojure.lang.Fn}
+  ([^clojure.lang.ISeq src
+    ^Number       num-drop
+    ^Number       num-take]
+   (seek-digits (digitize-seq-core src num-drop num-take)))
+  ([^clojure.lang.ISeq src
+    ^Number       num-drop]
+   (seek-digits (digitize-seq-core src num-drop)))
+  ([^clojure.lang.ISeq src]
+   (seek-digits (digitize-seq-core src))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
