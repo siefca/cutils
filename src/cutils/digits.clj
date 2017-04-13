@@ -683,12 +683,12 @@
   (let [had-numsig? (volatile! false)
         had-mark?   (volatile! false)]
 
-    (fn digitize-core-num [^clojure.lang.ISeq src]
-      (when (seq src)
-        (let [e (first src)
-              e (if (string? e) (str-trim e) e)
-              n (next src)]
-          (lazy-seq
+    (fn ^clojure.lang.ISeq digitize-core-num [^clojure.lang.ISeq src]
+      (lazy-seq
+       (when (seq src)
+         (let [e (first src)
+               e (if (string? e) (str-trim e) e)
+               n (next src)]
 
            (if (dfl-whitechar? e)
              (digitize-core-num n)
@@ -725,12 +725,12 @@
   [^clojure.lang.Fn sep-fn
    ^clojure.lang.Fn trn-fn]
 
-  (fn digitize-core-gen [^clojure.lang.ISeq src]
-    (when (seq src)
-      (let [e (first src)
-            n (next  src)]
+  (fn ^clojure.lang.ISeq digitize-core-gen [^clojure.lang.ISeq src]
+    (lazy-seq
+     (when (seq src)
+       (let [e (first src)
+             n (next  src)]
 
-        (lazy-seq
          ;; skipping white characters
          (if (dfl-whitechar? e)
            (digitize-core-gen n)
@@ -751,7 +751,7 @@
   [^clojure.lang.ISeq src]
   (when (seq src)
     (let [had-number? (volatile! false)]
-      ((fn sd [o]
+      ((fn ^clojure.lang.ISeq sd [^clojure.lang.ISeq o]
          (lazy-seq
           (if (seq o)
             (let [f (first o)]
@@ -768,23 +768,23 @@
   ([^clojure.lang.ISeq src
     ^Number       num-drop
     ^Number       num-take]
-   (when-some [r (digitize-seq src)]
+   (when-some [r (digitize-seq-core src)]
      (if *numeric-mode*
        (subseq-signed r num-drop num-take)
        (safe-subseq r num-drop (+' num-take num-drop)))))
   ([^clojure.lang.ISeq src
     ^Number       num-take]
-   (digitize-seq src 0 num-take))
+   (digitize-seq-core src 0 num-take))
   ([^clojure.lang.ISeq src]
    (when (seq src)
      (if *numeric-mode*
        (let [dcore-num (digitize-core-num-fn)]
-         (when-some [r (not-empty (dcore-num src))]
+         (when-some [r (dcore-num src)]
            (if (some-byte-digit? 3 r)
              (fix-sign-seq r)
              (dig-throw-arg "No digits found in a numeric series"))))
-       (let [dcore-gen (digitize-core-gen-fn (dfl-separator) (dfl-translator))]
-         (not-empty (dcore-gen src)))))))
+       (let [dcore-gen (digitize-core-gen-fn (dfl-separator-fn) (dfl-translator-fn))]
+         (dcore-gen src))))))
 
 (defn- digitize-seq
   {:added "1.0.0"
@@ -792,12 +792,12 @@
   ([^clojure.lang.ISeq src
     ^Number       num-drop
     ^Number       num-take]
-   (seek-digits (digitize-seq-core src num-drop num-take)))
+   (not-empty (seek-digits (digitize-seq-core src num-drop num-take))))
   ([^clojure.lang.ISeq src
     ^Number       num-drop]
-   (seek-digits (digitize-seq-core src num-drop)))
+   (not-empty (seek-digits (digitize-seq-core src num-drop))))
   ([^clojure.lang.ISeq src]
-   (seek-digits (digitize-seq-core src))))
+   (not-empty (seek-digits (digitize-seq-core src)))))
 
 (defn- digitize-num
   "Changes number into normalized representation. Returns number or nil."
