@@ -64,6 +64,18 @@
 
 (def ^{:added "1.0.0"
        :dynamic true
+       :tag java.lang.Character}
+  *minus-char*
+  \-)
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag java.lang.Character}
+  *plus-char*
+  \+)
+
+(def ^{:added "1.0.0"
+       :dynamic true
        :tag clojure.lang.IPersistentSet}
   *decimal-mark-chars*
   (let [ds (str *dot-char*)]
@@ -125,15 +137,33 @@
        :tag clojure.lang.IPersistentSet}
   *minus-signs*
   "Minus signs."
-  #{- :- '- "-" \-})
+  (let [s (symbol (str *minus-char*))
+        c #{*minus-char*
+            (str          *minus-char*)
+            (keyword (str *minus-char*))
+            s}]
+    (if-some [f (resolve s)] (conj c f (var-get f)) c)))
+
+(def ^{:added "1.0.0"
+       :dynamic true
+       :tag clojure.lang.IPersistentSet}
+  *plus-signs*
+  "Plus signs."
+  (let [s (symbol (str *plus-char*))
+        c #{*plus-char*
+            (str          *plus-char*)
+            (keyword (str *plus-char*))
+            s}]
+    (if-some [f (resolve s)] (conj c f (var-get f)) c)))
 
 (def ^{:added "1.0.0"
        :dynamic true
        :tag clojure.lang.IPersistentMap}
   *sign-to-char*
   "Map of plus and minus signs to characters."
-  {- \-, :- \-, '- \-, "-" \-, \- \-
-   + \+, :+ \+, '+ \+, "+" \+, \+ \+})
+  (apply hash-map (concat
+                   (interleave *minus-signs* (repeat *minus-char*))
+                   (interleave  *plus-signs* (repeat  *plus-char*)))))
 
 (def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentSet
@@ -147,7 +177,7 @@
        :dynamic true}
   *separators-translate*
   "Separators translation map used when numeric mode is disabled."
-  {- \-, + \+})
+  {- *minus-char*, + *plus-char*})
 
 (def ^{:added "1.0.0"
        :tag clojure.lang.IPersistentSet
@@ -240,6 +270,20 @@
    :tag Boolean}
   [^Character c]
   (= *dot-char* c))
+
+(defn minus?
+  "True if the given argument is a minus character."
+  {:added "1.0.0"
+   :tag Boolean}
+  [^Character c]
+  (= *minus-char* c))
+
+(defn plus?
+  "True if the given argument is a plus character."
+  {:added "1.0.0"
+   :tag Boolean}
+  [^Character c]
+  (= *plus-char* c))
 
 (defn decimal-mark?
   "True if the given argument is decimal mark character."
@@ -407,9 +451,8 @@
   {:added "1.0.0"
    :tag clojure.lang.ISeq}
   [^clojure.lang.ISeq coll]
-  (if (= \+ (first coll))
-    (when-some [r (next coll)] (lazy-seq r))
-    coll))
+  (lazy-seq
+   (if (plus? (first coll)) (rest coll) coll)))
 
 (defn- seq-negative?
   "Returns true if the digital sequence is valid and
@@ -418,6 +461,75 @@
    :tag Boolean}
   [^clojure.lang.ISeq coll]
   (contains? *minus-signs* (first coll)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Decimal dot fixing
+
+(defn- fix-dot-seq-last
+  [^clojure.lang.ISeq coll]
+  (lazy-seq
+   (when coll
+     (if-some [n (next coll)]
+       (cons (first coll) (fix-dot-seq-last n))
+       (if (empty? coll) coll
+           (let [f (first coll)]
+             (when-not (dot? f)
+               (cons f nil))))))))
+
+(defn- fix-dot-seq
+  [^clojure.lang.ISeq coll]
+  (fix-dot-seq-last
+   (lazy-seq
+    (let [f (first coll)]
+      (if (dot? f)
+        (if (nil? (next coll))
+          (rest coll)
+          (cons (byte 0) coll))
+        (if (minus? f)
+          (cons f (fix-dot-seq (next coll)))
+          coll))))))
+
+(defn- fix-dot-vec
+  [^clojure.lang.IPersistentVector v]
+  (when v
+    (if-not (contains? v 0) v
+            (let [c (dec (count v))]
+              (if (zero? c)
+                (if (dot? (get v 0)) (empty v) v)
+                (let [v (if (dot? (get v c)) (subvec v 0 c) v)
+                      f (get v 0)]
+                  (if (dot? f)
+                    (into [(byte 0)] v)
+                    (if (and (minus? f) (dot? (get v 1)))
+                      (into [f (byte 0)] (subvec v 1))
+                      v))))))))
+
+(defn- fix-dot-str
+  [^String s]
+  (when s
+    (if (empty? s) s
+        (let [c (dec (count s))]
+          (if (zero? c)
+            (if (dot? (get s 0)) (empty s) s)
+            (let [s (if (dot? (get s c)) (subs s 0 c) s)
+                  f (get s 0)]
+              (if (dot? f)
+                (str (byte 0) s)
+                (if (and (minus? f) (dot? (get s 1)))
+                  (str f (byte 0) (subs s 1))
+                  s))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Removing minus zero
+
+(defn- cleanmz-seq
+  [^clojure.lang.ISeq coll]
+  (lazy-seq
+   (if (minus? (first coll))
+     (if-some [n (next coll)]
+       (if (and (nil? (next n)) (zero? (first n))) n coll)
+       coll)
+     coll)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Counting
@@ -521,7 +633,7 @@
   ([^Number n]
    (lazy-seq
     (if (neg? n)
-      (cons \- (num->digits-core (-' n)))
+      (cons *minus-char* (num->digits-core (-' n)))
       (if (zero? n)
         (cons 0 nil)
         (num->digits-core n))))))
@@ -701,7 +813,9 @@
                  ;; adding positive or negative sign
                  (if @had-numsig?
                    (dig-throw-arg "The sign of a number should occur once and precede first digit")
-                   (do (vreset! had-numsig? true) (cons c (digitize-core-num n))))
+                   (do
+                     (vreset! had-numsig? true)
+                     (cons c (digitize-core-num n))))
 
                  ;; spreading numbers (if spread numbers is enabled)
                  (if (and *spread-numbers* (digital-number? e))
@@ -712,7 +826,9 @@
                      (if (decimal-mark? e)
                        (if @had-mark?
                          (dig-throw-arg "The decimal mark should occur just once")
-                         (do (vreset! had-mark? true) (cons *dot-char* (digitize-core-num n))))
+                         (do
+                           (vreset! had-mark? true)
+                           (cons *dot-char* (digitize-core-num n))))
                        (dig-throw-arg "Element is not a single digit, not a sign nor a decimal mark: " e))
 
                      (if (decimal-mark? e)
@@ -749,7 +865,9 @@
 
 (defn- seek-digits
   [^clojure.lang.ISeq src]
-  (when (seq src)
+  (when (some? src)
+    (when (and *numeric-mode* (not (some-byte-digit? 3 src)))
+      (dig-throw-arg "No digits found in a numeric series"))
     (let [had-number? (volatile! false)]
       ((fn ^clojure.lang.ISeq sd [^clojure.lang.ISeq o]
          (lazy-seq
@@ -770,7 +888,7 @@
     ^Number       num-take]
    (when-some [r (digitize-seq-core src)]
      (if *numeric-mode*
-       (subseq-signed r num-drop num-take)
+       (fix-dot-seq (subseq-signed r num-drop num-take))
        (safe-subseq r num-drop (+' num-take num-drop)))))
   ([^clojure.lang.ISeq src
     ^Number       num-take]
@@ -780,15 +898,16 @@
      (if *numeric-mode*
        (let [dcore-num (digitize-core-num-fn)]
          (when-some [r (dcore-num src)]
-           (if (some-byte-digit? 3 r)
-             (fix-sign-seq r)
-             (dig-throw-arg "No digits found in a numeric series"))))
+           (cleanmz-seq (fix-dot-seq (fix-sign-seq r)))))
        (let [dcore-gen (digitize-core-gen-fn (dfl-separator-fn) (dfl-translator-fn))]
          (dcore-gen src))))))
 
 (defn- digitize-seq
+  "Validates series of digits by calling the digitize-seq-core
+  and lazily checking if it contains at least one digit when reaching
+  last element."
   {:added "1.0.0"
-   :tag clojure.lang.Fn}
+   :tag clojure.lang.ISeq}
   ([^clojure.lang.ISeq src
     ^Number       num-drop
     ^Number       num-take]
@@ -817,54 +936,6 @@
     (if (digit? x)
       (get *vals-to-digits* x)
       (dig-throw-arg "Given character does not express a digit: " (str x)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Decimal dot fixing
-
-(defn- fix-dot-seq-last
-  [^clojure.lang.ISeq coll]
-  (lazy-seq
-   (when coll
-     (if-some [n (next coll)]
-       (cons (first coll) (fix-dot-seq-last n))
-       (if (empty? coll) coll
-           (let [f (first coll)]
-             (when-not (dot? f)
-               (cons f nil))))))))
-
-(defn- fix-dot-seq
-  [^clojure.lang.ISeq coll]
-  (fix-dot-seq-last
-   (lazy-seq
-    (if (dot? (first coll))
-      (if (nil? (next coll))
-        (rest coll)
-        (cons (byte 0) coll))
-      coll))))
-
-(defn- fix-dot-vec
-  [^clojure.lang.IPersistentVector v]
-  (when v
-    (if-not (contains? v 0) v
-            (let [c (dec (count v))]
-              (if (zero? c)
-                (if (dot? (get v 0)) (empty v) v)
-                (let [v (if (dot? (get v c)) (subvec v 0 c) v)]
-                  (if (dot? (get v 0))
-                    (into [(byte 0)] v)
-                    v)))))))
-
-(defn- fix-dot-str
-  [^String s]
-  (when s
-    (if (empty? s) s
-        (let [c (dec (count s))]
-          (if (zero? c)
-            (if (dot? (get s 0)) (empty s) s)
-            (let [s (if (dot? (get s c)) (subs s 0 c) s)]
-              (if (dot? (get s 0))
-                (str (byte 0) s)
-                s)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Digitizing protocol
