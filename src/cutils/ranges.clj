@@ -142,13 +142,13 @@
                    [^String s, ^Number start, ^Number end])
        :tag String}
   safe-subs
-  "Range-safe version of clojure.core/subs. Returns an empty string if
-  positions given as start and end are cancelling each other out and fixes
-  them if they're exceeding the boundaries. Positions are counted from 0 and
-  are determining the range which is left-closed (first element pointed by
-  start position is included) and right-open (last element pointed by end
-  position is excluded) similarly to clojure.core/subs. If two arguments are
-  given the start argument is a number of first elements to drop."
+  "Range-safe version of clojure.core/subs. Returns an empty string if positions
+  given as start and end are cancelling each other out and fixes them if
+  they're exceeding the boundaries. Positions are counted from 0 and are
+  determining the range which is left-closed (first element pointed by start
+  position is included) and right-open (last element pointed by end position
+  is excluded) similarly to clojure.core/subs. If two arguments are given the
+  start argument is a number of first elements to drop."
   (safe-range-fn subs))
 
 (defn subs-preserve
@@ -245,10 +245,10 @@
 
   Before generating new vector it memorizes original vector's first element if
   it matches one of the elements from a given set p. If there is no match the
-  function works the same way as cutils.ranges/safe-subvec. If there is a match
-  the function creates a subvector from all elements except first and then
-  returns the result with the memorized element added to the beginning of a
-  vector. It doesn't add the element if the resulting vector is empty.
+  function works the same way as cutils.ranges/safe-subvec. If there is a
+  match the function creates a subvector from all elements except first and
+  then returns the result with the memorized element added to the beginning of
+  a vector. It doesn't add the element if the resulting vector is empty.
 
   The function does not create new, empty vectors to collect parsed
   data. Internally it uses subvec and assoc on original structure."
@@ -286,104 +286,69 @@
   sliced to sub-collecitons)."
 
   (sub
-   [coll start] [coll start end]
-   "Produces a subcollection of coll. If two arguments are given the resulting
-  collection is a copy of the original collection with first elements
-  removed (with their count specified by the start argument). If three
-  arguments are given the last two specify a range which is left-closed (first
-  element pointed by start position is included) and right-open (last
-  element pointed by end position is excluded) similarly to clojure.core/subs.
+    [coll start] [coll start end]
+    "Produces a subcollection of coll. If two arguments are given the
+    resulting collection is a copy of the original collection with first
+    elements removed (with their count specified by the start argument). If
+    three arguments are given the last two specify a range which is
+    left-closed (first element pointed by start position is included) and
+    right-open (last element pointed by end position is excluded) similarly to
+    clojure.core/subs.
 
-  Returns an empty string if positions given as start and end are cancelling
-  each other out. Increases or decreases the range if its out of boundaries.")
+    Returns an empty string if positions given as start and end are cancelling
+    each other out. Increases or decreases the range if its out of boundaries.")
 
   (sub-preserve
-   [coll to-keep start] [coll to-keep start end]
-   "Produces a subcollection of coll preserving first element if its value
-  belongs to a set passed as to-keep. If three arguments are given the
-  resulting collection is a copy of the original collection with first
-  elements removed (with their number specified by the start argument). If
-  four arguments are given the last two specify a range which is
-  left-closed (first element pointed by start position is included) and
-  right-open (last element pointed by end position is excluded) similarly to
-  clojure.core/subs.
+    [coll to-keep start] [coll to-keep start end]
+    "Produces a subcollection of coll preserving first element if its value
+    belongs to a set passed as to-keep. If three arguments are given the
+    resulting collection is a copy of the original collection with first
+    elements removed (with their number specified by the start argument). If
+    four arguments are given the last two specify a range which is
+    left-closed (first element pointed by start position is included) and
+    right-open (last element pointed by end position is excluded) similarly to
+    clojure.core/subs.
 
-  Returns an empty string if positions given as start and end are cancelling
-  each other out. Increases or decreases the range if its out of boundaries."))
+    Returns an empty string if positions given as start and end are cancelling
+    each other out. Increases or decreases the range if its out of boundaries."))
 
 (extend-protocol Sliceable
 
   clojure.lang.IPersistentVector
 
   (sub
-      ([^clojure.lang.IPersistentVector v
-        ^Number start]
-       (safe-subvec v start))
-    ([^clojure.lang.IPersistentVector v
-      ^Number start
-      ^Number end]
-     (safe-subvec v start end)))
+    ([^clojure.lang.IPersistentVector v, ^Number start]                                              (safe-subvec v start))
+    ([^clojure.lang.IPersistentVector v, ^Number start, ^Number end]                                 (safe-subvec v start end)))
   (sub-preserve
-      ([^clojure.lang.IPersistentVector v
-        ^clojure.lang.IPersistentSet p
-        ^Number start]
-       (subvec-preserve v p start))
-    ([^clojure.lang.IPersistentVector v
-      ^clojure.lang.IPersistentSet p
-      ^Number start
-      ^Number end]
-     (subvec-preserve v start end)))
+    ([^clojure.lang.IPersistentVector v, ^clojure.lang.IPersistentSet p, ^Number start]              (subvec-preserve v p start))
+    ([^clojure.lang.IPersistentVector v, ^clojure.lang.IPersistentSet p, ^Number start, ^Number end] (subvec-preserve v start end)))
 
   java.lang.String
 
   (sub
-      ([^String s
-        ^Number start]
-       (safe-subs s start))
-    ([^String s
-      ^Number start
-      ^Number end]
-     (safe-subs s start end)))
+    ([^String s, ^Number start]                                                                     (safe-subs s start))
+    ([^String s, ^Number start, ^Number end]                                                        (safe-subs s start end)))
   (sub-preserve
-      ([^String s
-        ^clojure.lang.IPersistentSet p
-        ^Number start]
-       (subs-preserve s start))
-    ([^String s
-      ^clojure.lang.IPersistentSet p
-      ^Number start
-      ^Number end]
-     (subs-preserve s start end)))
+    ([^String s,  ^clojure.lang.IPersistentSet p, ^Number start]                                    (subs-preserve s start))
+    ([^String s,  ^clojure.lang.IPersistentSet p, ^Number start, ^Number end]                       (subs-preserve s start end)))
 
   clojure.lang.ISeq
 
   (sub
-      ([^clojure.lang.ISeq s
-        ^Number start]
-       (safe-subseq s start))
-    ([^clojure.lang.ISeq s
-      ^Number start
-      ^Number end]
-     (safe-subseq s start end)))
+    ([^clojure.lang.ISeq s, ^Number start]                                                           (safe-subseq s start))
+    ([^clojure.lang.ISeq s, ^Number start, ^Number end]                                              (safe-subseq s start end)))
   (sub-preserve
-      ([^clojure.lang.ISeq s
-        ^clojure.lang.IPersistentSet p
-        ^Number start]
-       (subseq-preserve s start))
-    ([^clojure.lang.ISeq s
-      ^clojure.lang.IPersistentSet p
-      ^Number start
-      ^Number end]
-     (subseq-preserve s start end)))
+    ([^clojure.lang.ISeq s, ^clojure.lang.IPersistentSet p, ^Number start]                           (subseq-preserve s start))
+    ([^clojure.lang.ISeq s, ^clojure.lang.IPersistentSet p, ^Number start, ^Number end]              (subseq-preserve s start end)))
 
   nil
 
   (sub
-      ([o start]        nil)
-    ([o start end]      nil))
+    ([o start]       nil)
+    ([o start end]   nil))
   (sub-preserve
-      ([o p start]      nil)
-    ([o p start end]    nil)))
+    ([o p start]     nil)
+    ([o p start end] nil)))
 
 (defn sliceable? [coll]
   "Returns true if coll satisfies the Sliceable protocol."
