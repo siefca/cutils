@@ -1193,186 +1193,151 @@
 
   clojure.lang.IPersistentVector
 
-  (count-digits
-    [^clojure.lang.IPersistentVector  v]                           (seq-count-digits (digitize-seq v)))
-  (digitize
-    [^clojure.lang.IPersistentVector  v]                           (not-empty (vec (digitize-seq v))))
-  (digital?
-    [^clojure.lang.IPersistentVector  v]                           (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq v)))))
+  (count-digits [v]              (seq-count-digits (digitize-seq v)))
+  (digitize     [v]              (not-empty (vec   (digitize-seq v))))
+  (digital?     [v]              (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq v)))))
+  (negative?    [v]              (try-or-false (seq-negative?    (with-numeric-mode! (digitize-seq v)))))
+  (numeric?     [v]              (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq v)))))
   (digits->seq
-    ([^clojure.lang.IPersistentVector v]                           (digitize-seq v))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (digitize-seq v nt))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (digitize-seq v nd nt)))
+    ([v]                         (digitize-seq v))
+    ([v, ^Number nt]             (digitize-seq v nt))
+    ([v, ^Number nd, ^Number nt] (digitize-seq v nd nt)))
   (digits->num
-    ([^clojure.lang.IPersistentVector v]                           (seq-digits->num (with-numeric-mode! (digits->seq v))))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->num (with-numeric-mode! (digits->seq v nt))))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->num (with-numeric-mode! (digits->seq v nd nt)))))
+    ([v]                         (seq-digits->num (with-numeric-mode! (digits->seq v))))
+    ([v, ^Number nt]             (seq-digits->num (with-numeric-mode! (digits->seq v nt))))
+    ([v, ^Number nd, ^Number nt] (seq-digits->num (with-numeric-mode! (digits->seq v nd nt)))))
   (digits->str
-    ([^clojure.lang.IPersistentVector v]                           (seq-digits->str (digits->seq v)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nt]             (seq-digits->str (digits->seq v nt)))
-    ([^clojure.lang.IPersistentVector   v, ^Number nd, ^Number nt] (seq-digits->str (digits->seq v nd nt))))
-  (negative?
-    [^clojure.lang.IPersistentVector  v]                           (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq v)))))
-  (numeric?
-    [^clojure.lang.IPersistentVector  v]                           (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq v)))))
+    ([v]                         (seq-digits->str (digits->seq v)))
+    ([v, ^Number nt]             (seq-digits->str (digits->seq v nt)))
+    ([v, ^Number nd, ^Number nt] (seq-digits->str (digits->seq v nd nt))))
 
   clojure.lang.ISeq
 
-  (count-digits
-    [^clojure.lang.ISeq s]                                         (seq-count-digits (digitize-seq s)))
-  (digitize
-    [^clojure.lang.ISeq s]                                         (digitize-seq s))
-  (digital?
-    [^clojure.lang.ISeq s]                                         (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
+  (count-digits [s]              (seq-count-digits (digitize-seq s)))
+  (digitize     [s]              (digitize-seq s))
+  (digital?     [s]              (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
+  (negative?    [s]              (try-or-false (seq-negative?    (with-numeric-mode! (digitize-seq s)))))
+  (numeric?     [s]              (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
   (digits->seq
-    ([^clojure.lang.ISeq s]                                        (digitize-seq s))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (digitize-seq s nt))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (digitize-seq s nd nt)))
+    ([s]                         (digitize-seq s))
+    ([s, ^Number nt]             (digitize-seq s nt))
+    ([s, ^Number nd, ^Number nt] (digitize-seq s nd nt)))
   (digits->num
-    ([^clojure.lang.ISeq s]                                        (seq-digits->num (with-numeric-mode! (digits->seq s))))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
+    ([s]                         (seq-digits->num (with-numeric-mode! (digits->seq s))))
+    ([s, ^Number nt]             (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
+    ([s, ^Number nd, ^Number nt] (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
   (digits->str
-    ([^clojure.lang.ISeq s]                                        (seq-digits->str (digits->seq s)))
-    ([^clojure.lang.ISeq   s, ^Number nt]                          (seq-digits->str (digits->seq s nt)))
-    ([^clojure.lang.ISeq   s, ^Number nd, ^Number nt]              (seq-digits->str (digits->seq s nd nt))))
-  (negative?
-    [^clojure.lang.ISeq  s]                                        (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
-  (numeric?
-    [^clojure.lang.ISeq s]                                         (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
+    ([s]                         (seq-digits->str (digits->seq s)))
+    ([s, ^Number nt]             (seq-digits->str (digits->seq s nt)))
+    ([s, ^Number nd, ^Number nt] (seq-digits->str (digits->seq s nd nt))))
 
   java.lang.String
 
-  (count-digits
-    [^String  s]                                                   (seq-count-digits (digitize-seq s)))
-  (digitize
-    [^String  s]                                                   (not-empty (seq-digits->str (digitize-seq s))))
-  (digital?
-    [^String  s]                                                   (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
+  (count-digits [s]              (seq-count-digits (digitize-seq s)))
+  (digitize     [s]              (not-empty (seq-digits->str (digitize-seq s))))
+  (digital?     [s]              (try-or-false (some-byte-digit? (with-generic-mode! (digitize-seq s)))))
+  (negative?    [s]              (try-or-false (seq-negative?    (with-numeric-mode! (digitize-seq s)))))
+  (numeric?     [s]              (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
   (digits->seq
-    ([^String s]                                                   (digitize-seq s))
-    ([^String   s, ^Number nt]                                     (digitize-seq s nt))
-    ([^String   s, ^Number nd, ^Number nt]                         (digitize-seq s nd nt)))
+    ([s]                         (digitize-seq s))
+    ([s, ^Number nt]             (digitize-seq s nt))
+    ([s, ^Number nd, ^Number nt] (digitize-seq s nd nt)))
   (digits->str
-    ([^String s]                                                   (seq-digits->str (digits->seq s)))
-    ([^String   s, ^Number nt]                                     (seq-digits->str (digits->seq s nt)))
-    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->str (digits->seq s nd nt))))
+    ([s]                         (seq-digits->str (digits->seq s)))
+    ([s, ^Number nt]             (seq-digits->str (digits->seq s nt)))
+    ([s, ^Number nd, ^Number nt] (seq-digits->str (digits->seq s nd nt))))
   (digits->num
-    ([^String s]                                                   (seq-digits->num (with-numeric-mode! (digits->seq s))))
-    ([^String   s, ^Number nt]                                     (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
-    ([^String   s, ^Number nd, ^Number nt]                         (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
-  (negative?
-    [^String  s]                                                   (try-or-false (seq-negative? (with-numeric-mode! (digitize-seq s)))))
-  (numeric?
-    [^String  s]                                                   (try-or-false (some-byte-digit? (with-numeric-mode! (digitize-seq s)))))
+    ([s]                         (seq-digits->num (with-numeric-mode! (digits->seq s))))
+    ([s, ^Number nt]             (seq-digits->num (with-numeric-mode! (digits->seq s nt))))
+    ([s, ^Number nd, ^Number nt] (seq-digits->num (with-numeric-mode! (digits->seq s nd nt)))))
 
   clojure.lang.Symbol
 
-  (count-digits
-    [^clojure.lang.Symbol  s]                                      (seq-count-digits (digitize-seq (name s))))
-  (digitize
-    [^clojure.lang.Symbol  s]                                      (when-let [x (digitize (name s))] (symbol x)))
-  (digital?
-    [^clojure.lang.Symbol  s]                                      (digital? (name s)))
+  (count-digits [s]              (seq-count-digits (digitize-seq (name s))))
+  (digitize     [s]              (when-let [x (digitize (name s))] (symbol x)))
+  (digital?     [s]              (digital?    (name s)))
+  (negative?    [s]              (negative?   (name s)))
+  (numeric?     [s]              (numeric?    (name s)))
   (digits->seq
-    ([^clojure.lang.Symbol s]                                      (digits->seq (name s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->seq (name s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->seq (name s) nd nt)))
+    ([s]                         (digits->seq (name s)))
+    ([s, ^Number nt]             (digits->seq (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->seq (name s) nd nt)))
   (digits->str
-    ([^clojure.lang.Symbol s]                                      (digits->str (name s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->str (name s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->str (name s) nd nt)))
+    ([s]                         (digits->str (name s)))
+    ([s, ^Number nt]             (digits->str (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->str (name s) nd nt)))
   (digits->num
-    ([^clojure.lang.Symbol s]                                      (digits->num (name s)))
-    ([^clojure.lang.Symbol   s, ^Number nt]                        (digits->num (name s) nt))
-    ([^clojure.lang.Symbol   s, ^Number nd, ^Number nt]            (digits->num (name s) nd nt)))
-  (negative?
-    [^clojure.lang.Symbol  s]                                      (negative? (name s)))
-  (numeric?
-    [^clojure.lang.Symbol  s]                                      (numeric? (name s)))
+    ([s]                         (digits->num (name s)))
+    ([s, ^Number nt]             (digits->num (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->num (name s) nd nt)))
 
   clojure.lang.Keyword
 
-  (count-digits
-    [^clojure.lang.Keyword  s]                                     (seq-count-digits (digitize-seq (name s))))
-  (digitize
-    [^clojure.lang.Keyword  s]                                     (when-let [x (digitize (name s))] (keyword x)))
-  (digital?
-    [^clojure.lang.Keyword  s]                                     (digital? (name s)))
+  (count-digits [s]              (seq-count-digits (digitize-seq (name s))))
+  (digitize     [s]              (when-let [x (digitize (name s))] (keyword x)))
+  (digital?     [s]              (digital?    (name s)))
+  (negative?    [s]              (negative?   (name s)))
+  (numeric?     [s]              (numeric?    (name s)))
   (digits->seq
-    ([^clojure.lang.Keyword s]                                     (digits->seq (name s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->seq (name s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->seq (name s) nd nt)))
+    ([s]                         (digits->seq (name s)))
+    ([s, ^Number nt]             (digits->seq (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->seq (name s) nd nt)))
   (digits->str
-    ([^clojure.lang.Keyword s]                                     (digits->str (name s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->str (name s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->str (name s) nd nt)))
+    ([s]                         (digits->str (name s)))
+    ([s, ^Number nt]             (digits->str (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->str (name s) nd nt)))
   (digits->num
-    ([^clojure.lang.Keyword s]                                     (digits->num (name s)))
-    ([^clojure.lang.Keyword   s, ^Number nt]                       (digits->num (name s) nt))
-    ([^clojure.lang.Keyword   s, ^Number nd, ^Number nt]           (digits->num (name s) nd nt)))
-  (negative?
-    [^clojure.lang.Keyword  s]                                     (negative? (name s)))
-  (numeric?
-    [^clojure.lang.Keyword  s]                                     (numeric? (name s)))
+    ([s]                         (digits->num (name s)))
+    ([s, ^Number nt]             (digits->num (name s) nt))
+    ([s, ^Number nd, ^Number nt] (digits->num (name s) nd nt)))
 
   java.lang.Character
 
-  (count-digits
-    [^Character  c]                                                (if (digit? (digitize-char c)) 1 0))
-  (digitize
-    [^Character  c]                                                (digitize-char c))
-  (digital?
-    [^Character  c]                                                (try-or-false (byte-digit? (with-generic-mode! (digitize-char c)))))
+  (count-digits [c]              (if (digit? (digitize-char c)) 1 0))
+  (digitize     [c]              (digitize-char c))
+  (digital?     [c]              (try-or-false (byte-digit?   (with-generic-mode! (digitize-char c)))))
+  (negative?    [c]              (try-or-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
+  (numeric?     [c]              (try-or-false (byte-digit?   (with-numeric-mode! (digitize-char c)))))
   (digits->seq
-    ([^Character c]                                                (not-empty (lazy-seq (cons (digitize-char c) nil))))
-    ([^Character   c, ^Number nt]                                  (subseq-signed (digits->seq c) 0 nt))
-    ([^Character   c, ^Number nd, ^Number nt]                      (subseq-signed (digits->seq c) nd nt)))
+    ([c]                         (not-empty (lazy-seq (cons (digitize-char c) nil))))
+    ([c, ^Number nt]             (subseq-signed (digits->seq c) 0 nt))
+    ([c, ^Number nd, ^Number nt] (subseq-signed (digits->seq c) nd nt)))
   (digits->str
-    ([^Character c]                                                (not-empty (str (digitize-char c))))
-    ([^Character   c, ^Number nt]                                  (subs-signed (digits->str c) 0 nt))
-    ([^Character   c, ^Number nd, ^Number nt]                      (subs-signed (digits->str c) nd nt)))
+    ([c]                         (not-empty (str (digitize-char c))))
+    ([c, ^Number nt]             (subs-signed (digits->str c) 0 nt))
+    ([c, ^Number nd, ^Number nt] (subs-signed (digits->str c) nd nt)))
   (digits->num
-    ([^Character c]                                                (some-> (digitize-char c) int))
-    ([^Character   c, ^Number nt]                                  (some-> (digits->str c nt) Integer/parseInt))
-    ([^Character   c, ^Number nd, ^Number nt]                      (some-> (digits->str c nd nt) Integer/parseInt)))
-  (negative?
-    [^Character  c]                                                (try-or-false (seq-negative? (with-numeric-mode! (digitize-char c)))))
-  (numeric?
-    [^Character  c]                                                (try-or-false (byte-digit? (with-numeric-mode! (digitize-char c)))))
+    ([c]                         (some-> (digitize-char c)     int))
+    ([c, ^Number nt]             (some-> (digits->str c nt)    Integer/parseInt))
+    ([c, ^Number nd, ^Number nt] (some-> (digits->str c nd nt) Integer/parseInt)))
 
   java.lang.Number
 
-  (count-digits
-    [^Number  n]                                                   (num-count-digits (digitize-num n)))
-  (digitize
-    [^Number  n]                                                   (digitize-num n))
-  (digital?
-    [^Number n]                                                    (try-or-false (some? (digitize-num n))))
+  (count-digits [n]              (num-count-digits (digitize-num n)))
+  (digitize     [n]              (digitize-num n))
+  (digital?     [n]              (try-or-false (some? (digitize-num n))))
+  (negative?    [n]              (neg? n))
+  (numeric?     [n]              (digital? n))
   (digits->seq
-    ([^Number n]                                                   (num->digits (digitize-num n)))
-    ([^Number   n, ^Number nt]                                     (subseq-signed (digits->seq n) 0 nt))
-    ([^Number   n, ^Number nd, ^Number nt]                         (subseq-signed (digits->seq n) nd nt)))
+    ([n]                         (num->digits (digitize-num n)))
+    ([n, ^Number nt]             (subseq-signed (digits->seq n) 0 nt))
+    ([n, ^Number nd, ^Number nt] (subseq-signed (digits->seq n) nd nt)))
   (digits->num
-    ([^Number n]                                                   (digitize-num n))
-    ([^Number   n, ^Number nt]                                     (digits->num (digits->seq n nt)))
-    ([^Number   n, ^Number nd, ^Number nt]                         (digits->num (digits->seq n nd nt))))
+    ([n]                         (digitize-num n))
+    ([n, ^Number nt]             (digits->num (digits->seq n nt)))
+    ([n, ^Number nd, ^Number nt] (digits->num (digits->seq n nd nt))))
   (digits->str
-    ([^Number n]                                                   (not-empty (str (digitize-num n))))
-    ([^Number n, ^Number nt]                                       (seq-digits->str (digits->seq n nt)))
-    ([^Number n, ^Number nd, ^Number nt]                           (seq-digits->str (digits->seq n nd nt))))
-  (negative?
-    [^Number  n]                                                   (neg? n))
-  (numeric?
-    [^Number n]                                                    (digital? n))
+    ([n]                         (not-empty (str  (digitize-num n))))
+    ([n, ^Number nt]             (seq-digits->str (digits->seq n nt)))
+    ([n, ^Number nd, ^Number nt] (seq-digits->str (digits->seq n nd nt))))
 
   clojure.lang.Fn
 
-  (count-digits   [o] (count-digits   (cons o ())))
-  (digitize       [o] (first (digitize(cons o ()))))
-  (digital?       [o] (digital?       (cons o ())))
-  (negative?      [o] (negative?      (cons o ())))
-  (numeric?       [o] (numeric?       (cons o ())))
+  (count-digits [o] (count-digits   (cons o ())))
+  (digitize     [o] (first (digitize(cons o ()))))
+  (digital?     [o] (digital?       (cons o ())))
+  (negative?    [o] (negative?      (cons o ())))
+  (numeric?     [o] (numeric?       (cons o ())))
   (digits->seq
     ([o]              (digits->seq (cons o ())))
     ([o nt]           (digits->seq (cons o ()) nt))
